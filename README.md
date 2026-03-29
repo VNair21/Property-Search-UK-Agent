@@ -19,7 +19,7 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
+cp .env.dev .env
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -57,6 +57,11 @@ This starts:
 
 - Redis at `localhost:6379`
 - FastAPI backend at `localhost:8000`
+
+Development extras included in Compose:
+
+- Backend code is bind-mounted (`./backend:/app`) and runs `uvicorn --reload` for hot reload.
+- Redis data is persisted in the named volume `redis_data` (AOF enabled).
 
 ## API endpoints included
 
