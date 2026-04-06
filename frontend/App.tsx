@@ -218,7 +218,13 @@ export default function App() {
 
           <View style={styles.fieldBlock}>
             <Text style={styles.label}>Update Frequency</Text>
-            <Pressable style={styles.dropdownTrigger} onPress={() => setIsDropdownOpen((prev) => !prev)}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.dropdownTrigger,
+                pressed ? styles.pressablePressed : undefined,
+              ]}
+              onPress={() => setIsDropdownOpen((prev) => !prev)}
+            >
               <Text style={styles.dropdownValue}>{updateFrequency}</Text>
               <Text style={styles.dropdownChevron}>⌄</Text>
             </Pressable>
@@ -230,7 +236,11 @@ export default function App() {
                   return (
                     <Pressable
                       key={option}
-                      style={[styles.dropdownItem, isSelected ? styles.dropdownItemSelected : undefined]}
+                      style={({ pressed }) => [
+                        styles.dropdownItem,
+                        isSelected ? styles.dropdownItemSelected : undefined,
+                        pressed ? styles.pressablePressed : undefined,
+                      ]}
                       onPress={() => onSelectFrequency(option)}
                     >
                       <Text style={styles.dropdownItemText}>{option}</Text>
@@ -245,7 +255,11 @@ export default function App() {
 
         <View style={styles.actionCard}>
           <Pressable
-            style={[styles.primaryButton, isSaving ? styles.primaryButtonDisabled : undefined]}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              isSaving ? styles.primaryButtonDisabled : undefined,
+              pressed && !isSaving ? styles.pressablePressed : undefined,
+            ]}
             onPress={() => void onStartAgent()}
             disabled={isSaving}
           >
@@ -253,7 +267,13 @@ export default function App() {
               {isSaving ? 'Saving...' : 'Set Property Agent Search'}
             </Text>
           </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={onCancelAgent}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.secondaryButton,
+              pressed ? styles.pressablePressed : undefined,
+            ]}
+            onPress={onCancelAgent}
+          >
             <Text style={styles.secondaryButtonText}>Cancel Property Agent</Text>
           </Pressable>
         </View>
@@ -395,6 +415,10 @@ const styles = StyleSheet.create({
   },
   primaryButtonDisabled: {
     opacity: 0.7,
+  },
+  pressablePressed: {
+    transform: [{ scale: 0.98 }],
+    opacity: 0.88,
   },
   primaryButtonText: {
     color: '#ffffff',
