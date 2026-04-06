@@ -19,7 +19,7 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.dev .env
+cp .env.example .env
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -68,6 +68,33 @@ Development extras included in Compose:
 - `GET /health` – basic service and Redis connectivity status
 - `POST /kv/{key}` with JSON body `{ "value": "..." }` – store a value in Redis
 - `GET /kv/{key}` – fetch a value from Redis
+- `POST /property-agent/set-search` – starts OpenAI-powered property search agent from UI fields
+- `POST /property-agent/cancel` – stops running property search agent
+- `GET /property-agent/status` – returns running state and latest top-10 findings
+
+
+### Keep secrets out of git (recommended local workflow)
+
+- `backend/.env.example` and `frontend/.env.example` are committed as templates only.
+- Create real local files that stay untracked:
+  - `cp backend/.env.example backend/.env`
+  - `cp frontend/.env.example frontend/.env`
+- Put sensitive values (for example `OPENAI_API_KEY`, `SMTP_PASSWORD`) only in your local `.env` files.
+- The repo `.gitignore` is configured to ignore `.env` / `.env.*` files while still allowing `.env.example` templates to be committed.
+
+## Property agent environment variables
+
+Set these in `backend/.env` for the agentic layer (copy from `backend/.env.example` first):
+
+- `OPENAI_API_KEY` – required for OpenAI-based search
+- `DEFAULT_OPENAI_MODEL` – optional, defaults to `gpt-5`
+- `SMTP_HOST` – SMTP server host (required to send results email)
+- `SMTP_PORT` – SMTP port (default `587`)
+- `SMTP_USE_TLS` – `true`/`false`, default `true`
+- `SMTP_USERNAME` – optional SMTP auth username
+- `SMTP_PASSWORD` – optional SMTP auth password
+- `SMTP_FROM_EMAIL` – required sender email address
+- `SMTP_RESULT_RECIPIENT` – required recipient email address for property reports
 
 ## Notes
 

@@ -77,6 +77,7 @@ export default function App() {
   const [isAgentRunning, setIsAgentRunning] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
+  const [resultTable, setResultTable] = useState<string>('');
 
   const statusLabel = useMemo(
     () => (isAgentRunning ? 'Agent Running' : 'Agent Stopped'),
@@ -139,30 +140,69 @@ export default function App() {
       [redisKeys.frequencyLabel]: updateFrequency,
       [redisKeys.frequencyMinutes]: frequencyMinutes,
     };
+    let agentStarted = false;
+    let latestResultTable = '';
 
     try {
-      const response = await fetch(`${API_BASE_URL}/kv/bulk`, {
+      const response = await fetch(`${API_BASE_URL}/property-agent/set-search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          websites_to_search: websites,
+          areas_to_search: areas,
+          property_criteria: criteria,
+          update_frequency_minutes: Number(frequencyMinutes),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorPayload = (await response.json()) as { detail?: string };
+        throw new Error(errorPayload.detail ?? 'Failed to create property search agent');
+      }
+
+      const payload = (await response.json()) as { table_markdown: string };
+      agentStarted = true;
+      latestResultTable = payload.table_markdown;
+
+      const kvResponse = await fetch(`${API_BASE_URL}/kv/bulk`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ values: valuesByKey }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to save search configuration atomically');
+      if (!kvResponse.ok) {
+        const errorPayload = (await kvResponse.json()) as { detail?: string };
+        throw new Error(errorPayload.detail ?? 'Failed to persist search settings');
       }
 
       setIsAgentRunning(true);
-      setStatusMessage(`Search saved. Update frequency stored as ${frequencyMinutes} minutes.`);
+      setStatusMessage(`Agent running. Searching every ${frequencyMinutes} minutes and emailing results.`);
+      setResultTable(latestResultTable);
     } catch (error) {
-      setIsAgentRunning(false);
-      setStatusMessage(`Failed to save search: ${(error as Error).message}`);
+      setIsAgentRunning(agentStarted);
+      setResultTable(agentStarted ? latestResultTable : '');
+      setStatusMessage(
+        agentStarted
+          ? `Agent started, but failed to save search settings: ${(error as Error).message}`
+          : `Failed to save search: ${(error as Error).message}`,
+      );
     } finally {
       setIsSaving(false);
     }
   };
 
-  const onCancelAgent = () => {
-    setIsAgentRunning(false);
+  const onCancelAgent = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/property-agent/cancel`, { method: 'POST' });
+      if (!response.ok) {
+        throw new Error('Failed to cancel property agent');
+      }
+      setIsAgentRunning(false);
+      setResultTable('');
+      setStatusMessage('Property agent cancelled. No further scheduled searches will run.');
+    } catch (error) {
+      setStatusMessage(`Failed to cancel property agent: ${(error as Error).message}`);
+    }
   };
 
   const onSelectFrequency = (option: FrequencyOption) => {
@@ -283,6 +323,14 @@ export default function App() {
           <Text style={styles.statusText}>{statusLabel}</Text>
         </View>
         {statusMessage ? <Text style={styles.statusMessage}>{statusMessage}</Text> : null}
+        {resultTable ? (
+          <View style={styles.resultsCard}>
+            <Text style={styles.resultsTitle}>Latest Results (Top 10)</Text>
+            <ScrollView horizontal>
+              <Text style={styles.resultsTableText}>{resultTable}</Text>
+            </ScrollView>
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -467,5 +515,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#515765',
     textAlign: 'center',
+  },
+  resultsCard: {
+    marginTop: 20,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 12,
+  },
+  resultsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+    color: '#161923',
+  },
+  resultsTableText: {
+    fontSize: 12,
+    color: '#222',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
 });

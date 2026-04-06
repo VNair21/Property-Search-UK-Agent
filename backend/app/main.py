@@ -6,8 +6,10 @@ from pydantic import BaseModel
 from redis.asyncio import Redis
 
 from .config import settings
+from .property_agent import PropertyAgentSetRequest, PropertyAgentStatus, PropertySearchAgent
 
 redis_client: Redis | None = None
+property_search_agent = PropertySearchAgent()
 
 
 class KVPayload(BaseModel):
@@ -24,6 +26,7 @@ async def lifespan(app: FastAPI):
     redis_client = Redis.from_url(settings.redis_url, decode_responses=True)
     yield
     if redis_client:
+        await property_search_agent.cancel()
         await redis_client.close()
 
 
@@ -51,6 +54,34 @@ async def health() -> dict[str, str]:
         "status": "ok",
         "redis": "ok" if pong else "error",
     }
+
+
+@app.post("/property-agent/set-search")
+async def set_property_agent_search(payload: PropertyAgentSetRequest):
+    if redis_client is None:
+        raise HTTPException(status_code=500, detail="Redis client not initialized")
+
+    try:
+        return await property_search_agent.configure_and_start(redis_client, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Unable to run property search agent: {exc}") from exc
+
+
+@app.get("/property-agent/status", response_model=PropertyAgentStatus)
+async def property_agent_status() -> PropertyAgentStatus:
+    if redis_client is None:
+        raise HTTPException(status_code=500, detail="Redis client not initialized")
+    return await property_search_agent.get_status(redis_client)
+
+
+@app.post("/property-agent/cancel")
+async def cancel_property_agent() -> dict[str, str]:
+    if redis_client is None:
+        raise HTTPException(status_code=500, detail="Redis client not initialized")
+    await property_search_agent.cancel()
+    return {"status": "stopped"}
 
 
 @app.post("/kv/bulk")
