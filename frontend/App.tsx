@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -13,7 +14,10 @@ import {
 type FrequencyOption = 'Hourly' | 'Daily' | 'Weekly' | 'Monthly';
 
 const frequencyOptions: FrequencyOption[] = ['Hourly', 'Daily', 'Weekly', 'Monthly'];
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
+const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_BASE_URL?.trim() || (Platform.OS === 'web' ? '' : 'http://localhost:8000');
+
+const buildApiUrl = (path: string): string => `${API_BASE_URL}${path}`;
 
 const redisKeys = {
   websites: 'property_agent:websites',
@@ -48,7 +52,7 @@ export default function App() {
   useEffect(() => {
     const loadSavedSearch = async () => {
       const readKey = async (key: string): Promise<string | null> => {
-        const response = await fetch(`${API_BASE_URL}/kv/${key}`);
+        const response = await fetch(buildApiUrl(`/kv/${key}`));
         if (!response.ok) {
           if (response.status === 404) {
             return null;
@@ -105,7 +109,7 @@ export default function App() {
     try {
       await Promise.all(
         payloads.map(async ({ key, value }) => {
-          const response = await fetch(`${API_BASE_URL}/kv/${key}`, {
+          const response = await fetch(buildApiUrl(`/kv/${key}`), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ value }),
