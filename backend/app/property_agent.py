@@ -118,6 +118,7 @@ class PropertySearchAgent:
         findings, table = await self._run_single_search(config)
         await self._save_config(redis_client, config)
         await self._save_results(redis_client, findings)
+        await self._send_email(findings, table, config)
 
         async with self._state.lock:
             if self._state.task:
@@ -130,8 +131,6 @@ class PropertySearchAgent:
                 self._scheduler_loop(redis_client, config),
                 name="property-search-agent",
             )
-
-        await self._send_email(findings, table, config)
 
         return PropertyAgentSetResponse(
             status="running",
