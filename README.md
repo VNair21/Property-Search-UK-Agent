@@ -42,8 +42,8 @@ To run on iOS (on macOS with Xcode):
 npm run ios
 ```
 
-By default, the app calls `http://localhost:8000`.
-For a physical device, update `EXPO_PUBLIC_API_BASE_URL` in `frontend/.env` to your machine's LAN IP.
+By default, the app targets port `8000` on the same host running Metro/Expo (`http://<dev-host>:8000`) so it works for `npm run web` and `npm run ios` development flows.
+If your backend runs elsewhere, set `EXPO_PUBLIC_API_BASE_URL` in `frontend/.env` (for example `http://localhost:8000` or your machine's LAN IP).
 
 ## 3) Redis + backend with Docker Compose
 
