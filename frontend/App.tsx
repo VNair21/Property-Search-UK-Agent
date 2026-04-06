@@ -141,13 +141,11 @@ export default function App() {
     };
 
     try {
-      await Promise.all(
-        payloads.map(async ({ key, value }) => {
-          const response = await fetch(buildApiUrl(`/kv/${key}`), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ value }),
-          });
+      const response = await fetch(`${API_BASE_URL}/kv/bulk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: valuesByKey }),
+      });
 
       if (!response.ok) {
         throw new Error('Failed to save search configuration atomically');
