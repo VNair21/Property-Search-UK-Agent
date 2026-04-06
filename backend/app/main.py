@@ -14,6 +14,10 @@ class KVPayload(BaseModel):
     value: str
 
 
+class KVBulkPayload(BaseModel):
+    values: dict[str, str]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global redis_client
@@ -47,6 +51,22 @@ async def health() -> dict[str, str]:
         "status": "ok",
         "redis": "ok" if pong else "error",
     }
+
+
+@app.post("/kv/bulk")
+async def set_values_bulk(payload: KVBulkPayload) -> dict[str, int]:
+    if redis_client is None:
+        raise HTTPException(status_code=500, detail="Redis client not initialized")
+
+    if not payload.values:
+        raise HTTPException(status_code=400, detail="No values provided")
+
+    async with redis_client.pipeline(transaction=True) as pipe:
+        for key, value in payload.values.items():
+            pipe.set(key, value)
+        await pipe.execute()
+
+    return {"saved": len(payload.values)}
 
 
 @app.post("/kv/{key}")
