@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  NativeModules,
   Platform,
   Pressable,
   SafeAreaView,
@@ -14,9 +15,42 @@ import {
 type FrequencyOption = 'Hourly' | 'Daily' | 'Weekly' | 'Monthly';
 
 const frequencyOptions: FrequencyOption[] = ['Hourly', 'Daily', 'Weekly', 'Monthly'];
-const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL?.trim() || (Platform.OS === 'web' ? '' : 'http://localhost:8000');
 
+const normalizeBaseUrl = (rawBaseUrl: string): string => rawBaseUrl.replace(/\/$/, '');
+
+const deriveDevHostFromBundle = (): string | null => {
+  const scriptUrl = (NativeModules as { SourceCode?: { scriptURL?: string } }).SourceCode?.scriptURL;
+  if (!scriptUrl) {
+    return null;
+  }
+
+  try {
+    const hostname = new URL(scriptUrl).hostname;
+    return hostname || null;
+  } catch (_error) {
+    return null;
+  }
+};
+
+const resolveApiBaseUrl = (): string => {
+  const configuredBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
+  if (configuredBaseUrl) {
+    return normalizeBaseUrl(configuredBaseUrl);
+  }
+
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return `${window.location.protocol}//${window.location.hostname}:8000`;
+  }
+
+  const derivedHost = deriveDevHostFromBundle();
+  if (derivedHost) {
+    return `http://${derivedHost}:8000`;
+  }
+
+  return 'http://localhost:8000';
+};
+
+const API_BASE_URL = resolveApiBaseUrl();
 const buildApiUrl = (path: string): string => `${API_BASE_URL}${path}`;
 
 const redisKeys = {
