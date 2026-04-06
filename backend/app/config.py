@@ -1,6 +1,21 @@
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Load order (first found wins per variable):
+# 1) OS environment variables
+# 2) backend/.env.local (repo root execution)
+# 3) backend/.env (repo root execution)
+# 4) .env.local (backend directory execution)
+# 5) .env (backend directory execution)
+#
+# This keeps secrets out of git while still making local development easy.
+ENV_FILE_CANDIDATES = (
+    "backend/.env.local",
+    "backend/.env",
+    ".env.local",
+    ".env",
+)
+
 
 class Settings(BaseSettings):
     app_name: str = "Starter API"
@@ -28,7 +43,11 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=ENV_FILE_CANDIDATES,
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = Settings()
