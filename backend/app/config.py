@@ -11,6 +11,14 @@ class Settings(BaseSettings):
         "http://localhost:8081",
         "http://127.0.0.1:8081",
     ]
+    openai_api_key: str = ""
+    default_openai_model: str = "gpt-5"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_use_tls: bool = True
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
 
     @field_validator("cors_origins", mode="before")
     @classmethod

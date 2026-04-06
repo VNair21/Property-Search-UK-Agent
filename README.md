@@ -68,6 +68,22 @@ Development extras included in Compose:
 - `GET /health` – basic service and Redis connectivity status
 - `POST /kv/{key}` with JSON body `{ "value": "..." }` – store a value in Redis
 - `GET /kv/{key}` – fetch a value from Redis
+- `POST /property-agent/set-search` – starts OpenAI-powered property search agent from UI fields
+- `POST /property-agent/cancel` – stops running property search agent
+- `GET /property-agent/status` – returns running state and latest top-10 findings
+
+## Property agent environment variables
+
+Set these in `backend/.env` for the agentic layer:
+
+- `OPENAI_API_KEY` – required for OpenAI-based search
+- `DEFAULT_OPENAI_MODEL` – optional, defaults to `gpt-5`
+- `SMTP_HOST` – SMTP server host (required to send results email)
+- `SMTP_PORT` – SMTP port (default `587`)
+- `SMTP_USE_TLS` – `true`/`false`, default `true`
+- `SMTP_USERNAME` – optional SMTP auth username
+- `SMTP_PASSWORD` – optional SMTP auth password
+- `SMTP_FROM_EMAIL` – required sender email address
 
 ## Notes
 
