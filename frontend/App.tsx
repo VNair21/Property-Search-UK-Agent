@@ -140,6 +140,8 @@ export default function App() {
       [redisKeys.frequencyLabel]: updateFrequency,
       [redisKeys.frequencyMinutes]: frequencyMinutes,
     };
+    let agentStarted = false;
+    let latestResultTable = '';
 
     try {
       const response = await fetch(`${API_BASE_URL}/property-agent/set-search`, {
@@ -159,19 +161,31 @@ export default function App() {
       }
 
       const payload = (await response.json()) as { table_markdown: string };
-      setIsAgentRunning(true);
-      setStatusMessage(`Agent running. Searching every ${frequencyMinutes} minutes and emailing results.`);
-      setResultTable(payload.table_markdown);
+      agentStarted = true;
+      latestResultTable = payload.table_markdown;
 
-      await fetch(`${API_BASE_URL}/kv/bulk`, {
+      const kvResponse = await fetch(`${API_BASE_URL}/kv/bulk`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ values: valuesByKey }),
       });
+
+      if (!kvResponse.ok) {
+        const errorPayload = (await kvResponse.json()) as { detail?: string };
+        throw new Error(errorPayload.detail ?? 'Failed to persist search settings');
+      }
+
+      setIsAgentRunning(true);
+      setStatusMessage(`Agent running. Searching every ${frequencyMinutes} minutes and emailing results.`);
+      setResultTable(latestResultTable);
     } catch (error) {
-      setIsAgentRunning(false);
-      setStatusMessage(`Failed to save search: ${(error as Error).message}`);
-      setResultTable('');
+      setIsAgentRunning(agentStarted);
+      setResultTable(agentStarted ? latestResultTable : '');
+      setStatusMessage(
+        agentStarted
+          ? `Agent started, but failed to save search settings: ${(error as Error).message}`
+          : `Failed to save search: ${(error as Error).message}`,
+      );
     } finally {
       setIsSaving(false);
     }
