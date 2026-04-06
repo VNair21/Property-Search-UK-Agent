@@ -1,6 +1,8 @@
 import { StatusBar } from 'expo-status-bar';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  NativeModules,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -14,21 +16,153 @@ type FrequencyOption = 'Hourly' | 'Daily' | 'Weekly' | 'Monthly';
 
 const frequencyOptions: FrequencyOption[] = ['Hourly', 'Daily', 'Weekly', 'Monthly'];
 
+const normalizeBaseUrl = (rawBaseUrl: string): string => rawBaseUrl.replace(/\/$/, '');
+
+const deriveDevHostFromBundle = (): string | null => {
+  const scriptUrl = (NativeModules as { SourceCode?: { scriptURL?: string } }).SourceCode?.scriptURL;
+  if (!scriptUrl) {
+    return null;
+  }
+
+  try {
+    const hostname = new URL(scriptUrl).hostname;
+    return hostname || null;
+  } catch (_error) {
+    return null;
+  }
+};
+
+const resolveApiBaseUrl = (): string => {
+  const configuredBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
+  if (configuredBaseUrl) {
+    return normalizeBaseUrl(configuredBaseUrl);
+  }
+
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return `${window.location.protocol}//${window.location.hostname}:8000`;
+  }
+
+  const derivedHost = deriveDevHostFromBundle();
+  if (derivedHost) {
+    return `http://${derivedHost}:8000`;
+  }
+
+  return 'http://localhost:8000';
+};
+
+const API_BASE_URL = resolveApiBaseUrl();
+const buildApiUrl = (path: string): string => `${API_BASE_URL}${path}`;
+
+const redisKeys = {
+  websites: 'property_agent:websites',
+  areas: 'property_agent:areas',
+  criteria: 'property_agent:criteria',
+  frequencyLabel: 'property_agent:frequency_label',
+  frequencyMinutes: 'property_agent:frequency_minutes',
+} as const;
+
+const frequencyToMinutes: Record<FrequencyOption, number> = {
+  Hourly: 60,
+  Daily: 24 * 60,
+  Weekly: 7 * 24 * 60,
+  Monthly: 30 * 24 * 60,
+};
+
 export default function App() {
   const [websites, setWebsites] = useState<string>('');
   const [areas, setAreas] = useState<string>('');
   const [criteria, setCriteria] = useState<string>('');
   const [updateFrequency, setUpdateFrequency] = useState<FrequencyOption>('Daily');
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
-  const [isAgentRunning, setIsAgentRunning] = useState<boolean>(true);
+  const [isAgentRunning, setIsAgentRunning] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [statusMessage, setStatusMessage] = useState<string>('');
 
   const statusLabel = useMemo(
     () => (isAgentRunning ? 'Agent Running' : 'Agent Stopped'),
     [isAgentRunning],
   );
 
-  const onStartAgent = () => {
-    setIsAgentRunning(true);
+  useEffect(() => {
+    const loadSavedSearch = async () => {
+      const readKey = async (key: string): Promise<string | null> => {
+        const response = await fetch(buildApiUrl(`/kv/${key}`));
+        if (!response.ok) {
+          if (response.status === 404) {
+            return null;
+          }
+          throw new Error(`Failed to load key "${key}"`);
+        }
+
+        const payload = (await response.json()) as { value: string };
+        return payload.value;
+      };
+
+      try {
+        const [savedWebsites, savedAreas, savedCriteria, savedFrequency] = await Promise.all([
+          readKey(redisKeys.websites),
+          readKey(redisKeys.areas),
+          readKey(redisKeys.criteria),
+          readKey(redisKeys.frequencyLabel),
+        ]);
+
+        if (savedWebsites !== null) {
+          setWebsites(savedWebsites);
+        }
+        if (savedAreas !== null) {
+          setAreas(savedAreas);
+        }
+        if (savedCriteria !== null) {
+          setCriteria(savedCriteria);
+        }
+        if (savedFrequency !== null && (frequencyOptions as string[]).includes(savedFrequency)) {
+          setUpdateFrequency(savedFrequency as FrequencyOption);
+        }
+      } catch (error) {
+        setStatusMessage(
+          `Could not load saved search configuration: ${(error as Error).message}`,
+        );
+      }
+    };
+
+    void loadSavedSearch();
+  }, []);
+
+  const onStartAgent = async () => {
+    setIsSaving(true);
+    setStatusMessage('');
+    const frequencyMinutes = frequencyToMinutes[updateFrequency].toString();
+    const payloads: Array<{ key: string; value: string }> = [
+      { key: redisKeys.websites, value: websites },
+      { key: redisKeys.areas, value: areas },
+      { key: redisKeys.criteria, value: criteria },
+      { key: redisKeys.frequencyLabel, value: updateFrequency },
+      { key: redisKeys.frequencyMinutes, value: frequencyMinutes },
+    ];
+
+    try {
+      await Promise.all(
+        payloads.map(async ({ key, value }) => {
+          const response = await fetch(buildApiUrl(`/kv/${key}`), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ value }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`Failed to save key "${key}"`);
+          }
+        }),
+      );
+
+      setIsAgentRunning(true);
+      setStatusMessage(`Search saved. Update frequency stored as ${frequencyMinutes} minutes.`);
+    } catch (error) {
+      setIsAgentRunning(false);
+      setStatusMessage(`Failed to save search: ${(error as Error).message}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const onCancelAgent = () => {
@@ -114,8 +248,14 @@ export default function App() {
         </View>
 
         <View style={styles.actionCard}>
-          <Pressable style={styles.primaryButton} onPress={onStartAgent}>
-            <Text style={styles.primaryButtonText}>Set Property Agent Search</Text>
+          <Pressable
+            style={[styles.primaryButton, isSaving ? styles.primaryButtonDisabled : undefined]}
+            onPress={() => void onStartAgent()}
+            disabled={isSaving}
+          >
+            <Text style={styles.primaryButtonText}>
+              {isSaving ? 'Saving...' : 'Set Property Agent Search'}
+            </Text>
           </Pressable>
           <Pressable style={styles.secondaryButton} onPress={onCancelAgent}>
             <Text style={styles.secondaryButtonText}>Cancel Property Agent</Text>
@@ -126,6 +266,7 @@ export default function App() {
           <View style={[styles.statusDot, isAgentRunning ? styles.statusDotRunning : styles.statusDotStopped]} />
           <Text style={styles.statusText}>{statusLabel}</Text>
         </View>
+        {statusMessage ? <Text style={styles.statusMessage}>{statusMessage}</Text> : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -173,7 +314,7 @@ const styles = StyleSheet.create({
     borderColor: '#dedee3',
     borderRadius: 14,
     paddingHorizontal: 16,
-    fontSize: 18 / 2 * 2,
+    fontSize: 18,
     color: '#202431',
     backgroundColor: '#f7f7fa',
   },
@@ -256,6 +397,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  primaryButtonDisabled: {
+    opacity: 0.7,
+  },
   primaryButtonText: {
     color: '#ffffff',
     fontSize: 17,
@@ -294,8 +438,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#d45a58',
   },
   statusText: {
-    fontSize: 20 / 2 * 2,
+    fontSize: 20,
     color: '#38404f',
     fontWeight: '500',
+  },
+  statusMessage: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#515765',
+    textAlign: 'center',
   },
 });
