@@ -132,13 +132,13 @@ export default function App() {
     setIsSaving(true);
     setStatusMessage('');
     const frequencyMinutes = frequencyToMinutes[updateFrequency].toString();
-    const payloads: Array<{ key: string; value: string }> = [
-      { key: redisKeys.websites, value: websites },
-      { key: redisKeys.areas, value: areas },
-      { key: redisKeys.criteria, value: criteria },
-      { key: redisKeys.frequencyLabel, value: updateFrequency },
-      { key: redisKeys.frequencyMinutes, value: frequencyMinutes },
-    ];
+    const valuesByKey: Record<string, string> = {
+      [redisKeys.websites]: websites,
+      [redisKeys.areas]: areas,
+      [redisKeys.criteria]: criteria,
+      [redisKeys.frequencyLabel]: updateFrequency,
+      [redisKeys.frequencyMinutes]: frequencyMinutes,
+    };
 
     try {
       await Promise.all(
@@ -149,11 +149,9 @@ export default function App() {
             body: JSON.stringify({ value }),
           });
 
-          if (!response.ok) {
-            throw new Error(`Failed to save key "${key}"`);
-          }
-        }),
-      );
+      if (!response.ok) {
+        throw new Error('Failed to save search configuration atomically');
+      }
 
       setIsAgentRunning(true);
       setStatusMessage(`Search saved. Update frequency stored as ${frequencyMinutes} minutes.`);
