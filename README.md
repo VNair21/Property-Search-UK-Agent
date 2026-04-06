@@ -84,6 +84,7 @@ Set these in `backend/.env` for the agentic layer:
 - `SMTP_USERNAME` – optional SMTP auth username
 - `SMTP_PASSWORD` – optional SMTP auth password
 - `SMTP_FROM_EMAIL` – required sender email address
+- `SMTP_RESULT_RECIPIENT` – required recipient email address for property reports
 
 ## Notes
 

@@ -17,7 +17,6 @@ from .config import settings
 
 logger = logging.getLogger(__name__)
 
-RESULT_RECIPIENT = "vishnunairvvv@hotmail.co.uk"
 AGENT_CONFIG_KEY = "property_agent:config"
 AGENT_RESULTS_KEY = "property_agent:last_results"
 
@@ -138,7 +137,7 @@ class PropertySearchAgent:
             status="running",
             model=config.model,
             update_frequency_minutes=config.update_frequency_minutes,
-            recipient=RESULT_RECIPIENT,
+            recipient=settings.smtp_result_recipient,
             findings=findings,
             table_markdown=table,
         )
@@ -235,7 +234,7 @@ class PropertySearchAgent:
         )
         message["Subject"] = "Property Search Agent Results"
         message["From"] = settings.smtp_from_email
-        message["To"] = RESULT_RECIPIENT
+        message["To"] = settings.smtp_result_recipient
 
         def _send() -> None:
             with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
@@ -296,5 +295,5 @@ class PropertySearchAgent:
     def _validate_runtime_settings(self) -> None:
         if not settings.openai_api_key:
             raise ValueError("OPENAI_API_KEY must be configured")
-        if not settings.smtp_host or not settings.smtp_from_email:
-            raise ValueError("SMTP settings must be configured")
+        if not settings.smtp_host or not settings.smtp_from_email or not settings.smtp_result_recipient:
+            raise ValueError("SMTP settings must be configured, including SMTP_RESULT_RECIPIENT")

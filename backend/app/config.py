@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     smtp_username: str = ""
     smtp_password: str = ""
     smtp_from_email: str = ""
+    smtp_result_recipient: str = ""
 
     @field_validator("cors_origins", mode="before")
     @classmethod
