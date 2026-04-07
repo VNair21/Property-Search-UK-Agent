@@ -4,6 +4,7 @@
     "slug": "starter-frontend",
     "version": "1.0.0",
     "orientation": "portrait",
+    "newArchEnabled": true,
     "userInterfaceStyle": "automatic",
     "platforms": ["ios", "web"],
     "ios": {
