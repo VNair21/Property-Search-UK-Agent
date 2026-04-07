@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     ]
     openai_api_key: SecretStr | None = None
     default_openai_model: str = "gpt-5"
+    notification_channel: Literal["telegram", "email"] = "telegram"
+    telegram_bot_token: SecretStr | None = None
+    telegram_chat_id: str = ""
+    telegram_api_base_url: str = "https://api.telegram.org"
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_use_tls: bool = True

@@ -90,7 +90,11 @@ If you want machine-specific overrides, create `backend/.env.local`; the backend
 
 - `OPENAI_API_KEY` – required for OpenAI-based search
 - `DEFAULT_OPENAI_MODEL` – optional, defaults to `gpt-5`
-- `SMTP_HOST` – SMTP server host (required to send results email)
+- `NOTIFICATION_CHANNEL` – `telegram` (default) or `email`
+- `TELEGRAM_BOT_TOKEN` – required when `NOTIFICATION_CHANNEL=telegram`
+- `TELEGRAM_CHAT_ID` – required when `NOTIFICATION_CHANNEL=telegram`
+- `TELEGRAM_API_BASE_URL` – optional, defaults to `https://api.telegram.org`
+- `SMTP_HOST` – SMTP server host (required only when `NOTIFICATION_CHANNEL=email`)
 - `SMTP_PORT` – SMTP port (default `587`)
 - `SMTP_USE_TLS` – `true`/`false`, default `true`
 - `SMTP_AUTH_METHOD` – `basic` (default), `xoauth2`, or `none`
@@ -98,8 +102,8 @@ If you want machine-specific overrides, create `backend/.env.local`; the backend
 - `SMTP_PASSWORD` – password/app-password for `basic` auth
 - `SMTP_OAUTH2_USER` – email/username used for `xoauth2` SMTP auth
 - `SMTP_OAUTH2_ACCESS_TOKEN` – OAuth2 bearer token used for `xoauth2` SMTP auth
-- `SMTP_FROM_EMAIL` – required sender email address
-- `SMTP_RESULT_RECIPIENT` – required recipient email address for property reports
+- `SMTP_FROM_EMAIL` – required sender email address when `NOTIFICATION_CHANNEL=email`
+- `SMTP_RESULT_RECIPIENT` – required recipient email address when `NOTIFICATION_CHANNEL=email`
 
 If you use Hotmail/Outlook and basic SMTP auth is blocked, set `SMTP_AUTH_METHOD=xoauth2` and provide `SMTP_OAUTH2_USER` + `SMTP_OAUTH2_ACCESS_TOKEN`.
 
