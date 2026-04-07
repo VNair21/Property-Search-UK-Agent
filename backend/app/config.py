@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -21,8 +22,11 @@ class Settings(BaseSettings):
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_use_tls: bool = True
+    smtp_auth_method: Literal["none", "basic", "xoauth2"] = "basic"
     smtp_username: str = ""
     smtp_password: SecretStr | None = None
+    smtp_oauth2_user: str = ""
+    smtp_oauth2_access_token: SecretStr | None = None
     smtp_from_email: str = ""
     smtp_result_recipient: str = ""
 

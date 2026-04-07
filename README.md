@@ -93,10 +93,15 @@ If you want machine-specific overrides, create `backend/.env.local`; the backend
 - `SMTP_HOST` – SMTP server host (required to send results email)
 - `SMTP_PORT` – SMTP port (default `587`)
 - `SMTP_USE_TLS` – `true`/`false`, default `true`
-- `SMTP_USERNAME` – optional SMTP auth username
-- `SMTP_PASSWORD` – optional SMTP auth password
+- `SMTP_AUTH_METHOD` – `basic` (default), `xoauth2`, or `none`
+- `SMTP_USERNAME` – username for SMTP auth (used by `basic`; optional fallback identity for `xoauth2`)
+- `SMTP_PASSWORD` – password/app-password for `basic` auth
+- `SMTP_OAUTH2_USER` – email/username used for `xoauth2` SMTP auth
+- `SMTP_OAUTH2_ACCESS_TOKEN` – OAuth2 bearer token used for `xoauth2` SMTP auth
 - `SMTP_FROM_EMAIL` – required sender email address
 - `SMTP_RESULT_RECIPIENT` – required recipient email address for property reports
+
+If you use Hotmail/Outlook and basic SMTP auth is blocked, set `SMTP_AUTH_METHOD=xoauth2` and provide `SMTP_OAUTH2_USER` + `SMTP_OAUTH2_ACCESS_TOKEN`.
 
 ## Notes
 
