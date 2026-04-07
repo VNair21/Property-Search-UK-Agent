@@ -109,6 +109,7 @@ export default function App() {
   const [areas, setAreas] = useState<string>('');
   const [criteria, setCriteria] = useState<string>('');
   const [updateFrequency, setUpdateFrequency] = useState<FrequencyOption>('Daily');
+  const [hasUnsavedFrequencySelection, setHasUnsavedFrequencySelection] = useState<boolean>(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
   const [isAgentRunning, setIsAgentRunning] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -120,7 +121,8 @@ export default function App() {
     [isAgentRunning],
   );
 
-  const fetchAgentStatus = async () => {
+  const fetchAgentStatus = async (options?: { syncFrequencySelection?: boolean }) => {
+    const shouldSyncFrequencySelection = options?.syncFrequencySelection ?? false;
     const response = await fetch(buildApiUrl('/property-agent/status'));
     if (!response.ok) {
       throw new Error('Failed to load property agent status');
@@ -134,13 +136,21 @@ export default function App() {
 
     setIsAgentRunning(payload.is_running);
 
-    if (payload.update_frequency_minutes !== null) {
+    if (payload.update_frequency_minutes !== null && !hasUnsavedFrequencySelection) {
       const frequencyMatch = Object.entries(frequencyToMinutes).find(
         ([_label, minutes]) => minutes === payload.update_frequency_minutes,
       );
       if (frequencyMatch) {
         setUpdateFrequency(frequencyMatch[0] as FrequencyOption);
       }
+    } else if (payload.update_frequency_minutes !== null && shouldSyncFrequencySelection) {
+      const frequencyMatch = Object.entries(frequencyToMinutes).find(
+        ([_label, minutes]) => minutes === payload.update_frequency_minutes,
+      );
+      if (frequencyMatch) {
+        setUpdateFrequency(frequencyMatch[0] as FrequencyOption);
+      }
+      setHasUnsavedFrequencySelection(false);
     }
 
     const hasFindings = payload.findings.length > 0;
@@ -183,7 +193,7 @@ export default function App() {
           setUpdateFrequency(savedFrequency as FrequencyOption);
         }
 
-        await fetchAgentStatus();
+        await fetchAgentStatus({ syncFrequencySelection: true });
       } catch (error) {
         setStatusMessage(
           `Could not load saved configuration or agent status: ${(error as Error).message}`,
@@ -241,6 +251,7 @@ export default function App() {
       }
 
       setIsAgentRunning(true);
+      setHasUnsavedFrequencySelection(false);
       setStatusMessage(
         `Agent running. Searching every ${frequencyMinutes} minutes and sending updates via the configured notification channel.`,
       );
@@ -284,6 +295,7 @@ export default function App() {
 
   const onSelectFrequency = (option: FrequencyOption) => {
     setUpdateFrequency(option);
+    setHasUnsavedFrequencySelection(true);
     setIsDropdownOpen(false);
   };
 
