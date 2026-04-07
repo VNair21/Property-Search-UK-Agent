@@ -112,6 +112,7 @@ export default function App() {
   const [hasUnsavedFrequencySelection, setHasUnsavedFrequencySelection] = useState<boolean>(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
   const [isAgentRunning, setIsAgentRunning] = useState<boolean>(false);
+  const [hideCachedFindings, setHideCachedFindings] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [resultTable, setResultTable] = useState<string>('');
@@ -135,6 +136,9 @@ export default function App() {
     };
 
     setIsAgentRunning(payload.is_running);
+    if (payload.is_running) {
+      setHideCachedFindings(false);
+    }
 
     if (payload.update_frequency_minutes !== null && !hasUnsavedFrequencySelection) {
       const frequencyMatch = Object.entries(frequencyToMinutes).find(
@@ -154,7 +158,8 @@ export default function App() {
     }
 
     const hasFindings = payload.findings.length > 0;
-    setResultTable(hasFindings ? findingsToMarkdown(payload.findings) : '');
+    const shouldShowFindings = hasFindings && !hideCachedFindings;
+    setResultTable(shouldShowFindings ? findingsToMarkdown(payload.findings) : '');
   };
 
   useEffect(() => {
@@ -251,6 +256,7 @@ export default function App() {
       }
 
       setIsAgentRunning(true);
+      setHideCachedFindings(false);
       setHasUnsavedFrequencySelection(false);
       setStatusMessage(
         `Agent running. Searching every ${frequencyMinutes} minutes and sending updates via the configured notification channel.`,
@@ -276,6 +282,7 @@ export default function App() {
         throw new Error('Failed to cancel property agent');
       }
       setIsAgentRunning(false);
+      setHideCachedFindings(true);
       setResultTable('');
       setStatusMessage('Property agent cancelled. No further scheduled searches will run.');
     } catch (error) {
