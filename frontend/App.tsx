@@ -66,6 +66,7 @@ const resolveApiBaseUrl = (): string => {
 
 const API_BASE_URL = resolveApiBaseUrl();
 const buildApiUrl = (path: string): string => `${API_BASE_URL}${path}`;
+const isHttpUrl = (value: string): boolean => /^https?:\/\//i.test(value);
 
 const redisKeys = {
   websites: 'property_agent:websites',
@@ -125,6 +126,26 @@ export default function App() {
     () => (isAgentRunning ? 'Agent Running' : 'Agent Stopped'),
     [isAgentRunning],
   );
+
+  const handleListingPress = async (rawListingUrl: string): Promise<void> => {
+    const listingUrl = rawListingUrl.trim();
+    if (!listingUrl || !isHttpUrl(listingUrl)) {
+      setStatusMessage('Unable to open listing: invalid URL format.');
+      return;
+    }
+
+    try {
+      const canOpenUrl = await Linking.canOpenURL(listingUrl);
+      if (!canOpenUrl) {
+        setStatusMessage('Unable to open listing: unsupported URL.');
+        return;
+      }
+
+      await Linking.openURL(listingUrl);
+    } catch (_error) {
+      setStatusMessage('Unable to open listing right now. Please try again.');
+    }
+  };
 
   const fetchAgentStatus = async (options?: { syncFrequencySelection?: boolean }) => {
     const shouldSyncFrequencySelection = options?.syncFrequencySelection ?? false;
@@ -451,7 +472,7 @@ export default function App() {
                         <Pressable
                           key={`${rowIndex}-${column.key}`}
                           onPress={() => {
-                            void Linking.openURL(finding.listing_url);
+                            void handleListingPress(finding.listing_url);
                           }}
                         >
                           <Text style={[styles.tableBodyCell, styles.linkCell, { width: column.width }]}>
