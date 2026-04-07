@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import json
 import logging
+import re
 import smtplib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -110,7 +112,8 @@ class AgentRunState:
 class PropertySearchAgent:
     def __init__(self) -> None:
         self._state = AgentRunState()
-        self._client = AsyncOpenAI(api_key=settings.openai_api_key)
+        api_key = settings.openai_api_key.get_secret_value() if settings.openai_api_key else None
+        self._client = AsyncOpenAI(api_key=api_key)
 
     async def configure_and_start(self, redis_client: Redis, request: PropertyAgentSetRequest) -> PropertyAgentSetResponse:
         self._validate_runtime_settings()
@@ -192,14 +195,23 @@ class PropertySearchAgent:
             model=config.model,
             input=prompt,
             tools=[{"type": "web_search_preview"}],
-            text={"format": {"type": "json_object"}},
         )
 
-        raw_text = response.output_text.strip().removeprefix("```json").removesuffix("```").strip()
+        raw_text = self._extract_json_payload(response.output_text)
         parsed = PropertySearchResult.model_validate_json(raw_text)
         findings = sorted(parsed.findings, key=lambda item: item.rank)[:10]
         renumbered = [item.model_copy(update={"rank": index}) for index, item in enumerate(findings, start=1)]
         return renumbered, self._to_markdown_table(renumbered)
+
+    def _extract_json_payload(self, output_text: str) -> str:
+        cleaned = output_text.strip().removeprefix("```json").removesuffix("```").strip()
+        if cleaned.startswith("{") and cleaned.endswith("}"):
+            return cleaned
+
+        match = re.search(r"\{[\s\S]*\}", cleaned)
+        if not match:
+            raise ValueError("Model response did not contain valid JSON")
+        return match.group(0)
 
     async def _save_config(self, redis_client: Redis, config: PropertyAgentConfig) -> None:
         await redis_client.set(AGENT_CONFIG_KEY, config.model_dump_json())
@@ -236,14 +248,43 @@ class PropertySearchAgent:
         message["To"] = settings.smtp_result_recipient
 
         def _send() -> None:
-            with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
-                if settings.smtp_use_tls:
-                    smtp.starttls()
-                if settings.smtp_username and settings.smtp_password:
-                    smtp.login(settings.smtp_username, settings.smtp_password)
-                smtp.send_message(message)
+            try:
+                with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
+                    if settings.smtp_use_tls:
+                        smtp.starttls()
+                    self._authenticate_smtp(smtp)
+                    smtp.send_message(message)
+            except smtplib.SMTPAuthenticationError as exc:
+                server_message = exc.smtp_error.decode("utf-8", errors="ignore")
+                if "basic authentication is disabled" in server_message.lower():
+                    raise ValueError(
+                        "SMTP authentication failed: provider rejected basic username/password auth. "
+                        "Switch SMTP_AUTH_METHOD=xoauth2 and provide SMTP_OAUTH2_USER + SMTP_OAUTH2_ACCESS_TOKEN."
+                    ) from exc
+                raise ValueError(f"SMTP authentication failed: {server_message}") from exc
 
         await asyncio.to_thread(_send)
+
+    def _authenticate_smtp(self, smtp: smtplib.SMTP) -> None:
+        if settings.smtp_auth_method == "none":
+            return
+
+        if settings.smtp_auth_method == "basic":
+            if settings.smtp_username and settings.smtp_password:
+                smtp.login(settings.smtp_username, settings.smtp_password.get_secret_value())
+            return
+
+        if settings.smtp_auth_method == "xoauth2":
+            oauth_user = settings.smtp_oauth2_user or settings.smtp_username or settings.smtp_from_email
+            if not oauth_user or not settings.smtp_oauth2_access_token:
+                raise ValueError("SMTP_OAUTH2_USER and SMTP_OAUTH2_ACCESS_TOKEN must be configured for xoauth2 auth")
+
+            auth_string = f"user={oauth_user}\x01auth=Bearer {settings.smtp_oauth2_access_token.get_secret_value()}\x01\x01"
+            encoded_auth = base64.b64encode(auth_string.encode("utf-8")).decode("ascii")
+            code, response = smtp.docmd("AUTH", "XOAUTH2 " + encoded_auth)
+            if code != 235:
+                decoded = response.decode("utf-8", errors="ignore")
+                raise smtplib.SMTPAuthenticationError(code, response if isinstance(response, bytes) else decoded.encode())
 
     def _build_prompt(self, config: PropertyAgentConfig) -> str:
         domains = "\n".join([f"- {site}" for site in config.websites_to_search])
@@ -296,3 +337,9 @@ class PropertySearchAgent:
             raise ValueError("OPENAI_API_KEY must be configured")
         if not settings.smtp_host or not settings.smtp_from_email or not settings.smtp_result_recipient:
             raise ValueError("SMTP settings must be configured, including SMTP_RESULT_RECIPIENT")
+        if settings.smtp_auth_method == "basic" and settings.smtp_username and not settings.smtp_password:
+            raise ValueError("SMTP_PASSWORD must be configured when SMTP_AUTH_METHOD=basic and SMTP_USERNAME is set")
+        if settings.smtp_auth_method == "xoauth2":
+            oauth_user = settings.smtp_oauth2_user or settings.smtp_username or settings.smtp_from_email
+            if not oauth_user or not settings.smtp_oauth2_access_token:
+                raise ValueError("SMTP_OAUTH2_USER (or SMTP_USERNAME/SMTP_FROM_EMAIL) and SMTP_OAUTH2_ACCESS_TOKEN are required for SMTP_AUTH_METHOD=xoauth2")
