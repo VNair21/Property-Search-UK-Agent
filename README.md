@@ -98,6 +98,8 @@ If you want machine-specific overrides, create `backend/.env.local`; the backend
 - `SMTP_FROM_EMAIL` – required sender email address
 - `SMTP_RESULT_RECIPIENT` – required recipient email address for property reports
 
+If you use Microsoft 365 / Outlook SMTP and see an auth error mentioning "basic authentication is disabled", your tenant/mailbox likely blocks username/password SMTP. Enable SMTP AUTH for that mailbox, use an app password (if available), or route email through an OAuth-capable relay.
+
 ## Notes
 
 - Redis is being used as the **primary datastore** in this starter.

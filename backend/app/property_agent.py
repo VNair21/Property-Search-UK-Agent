@@ -247,12 +247,21 @@ class PropertySearchAgent:
         message["To"] = settings.smtp_result_recipient
 
         def _send() -> None:
-            with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
-                if settings.smtp_use_tls:
-                    smtp.starttls()
-                if settings.smtp_username and settings.smtp_password:
-                    smtp.login(settings.smtp_username, settings.smtp_password.get_secret_value())
-                smtp.send_message(message)
+            try:
+                with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
+                    if settings.smtp_use_tls:
+                        smtp.starttls()
+                    if settings.smtp_username and settings.smtp_password:
+                        smtp.login(settings.smtp_username, settings.smtp_password.get_secret_value())
+                    smtp.send_message(message)
+            except smtplib.SMTPAuthenticationError as exc:
+                server_message = exc.smtp_error.decode("utf-8", errors="ignore")
+                if "basic authentication is disabled" in server_message.lower():
+                    raise ValueError(
+                        "SMTP authentication failed: provider rejected basic username/password auth. "
+                        "For Microsoft 365/Outlook, enable SMTP AUTH for the mailbox or use an app password/OAuth-based relay."
+                    ) from exc
+                raise ValueError(f"SMTP authentication failed: {server_message}") from exc
 
         await asyncio.to_thread(_send)
 
