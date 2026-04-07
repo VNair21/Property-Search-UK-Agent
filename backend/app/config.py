@@ -1,5 +1,10 @@
-from pydantic import field_validator
+from pathlib import Path
+
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 
 class Settings(BaseSettings):
@@ -11,13 +16,13 @@ class Settings(BaseSettings):
         "http://localhost:8081",
         "http://127.0.0.1:8081",
     ]
-    openai_api_key: str = ""
+    openai_api_key: SecretStr | None = None
     default_openai_model: str = "gpt-5"
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_use_tls: bool = True
     smtp_username: str = ""
-    smtp_password: str = ""
+    smtp_password: SecretStr | None = None
     smtp_from_email: str = ""
     smtp_result_recipient: str = ""
 
@@ -28,7 +33,10 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=(BACKEND_DIR / ".env", BACKEND_DIR / ".env.local"),
+        extra="ignore",
+    )
 
 
 settings = Settings()
