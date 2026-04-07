@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import json
 import logging
@@ -251,19 +252,39 @@ class PropertySearchAgent:
                 with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
                     if settings.smtp_use_tls:
                         smtp.starttls()
-                    if settings.smtp_username and settings.smtp_password:
-                        smtp.login(settings.smtp_username, settings.smtp_password.get_secret_value())
+                    self._authenticate_smtp(smtp)
                     smtp.send_message(message)
             except smtplib.SMTPAuthenticationError as exc:
                 server_message = exc.smtp_error.decode("utf-8", errors="ignore")
                 if "basic authentication is disabled" in server_message.lower():
                     raise ValueError(
                         "SMTP authentication failed: provider rejected basic username/password auth. "
-                        "For Microsoft 365/Outlook, enable SMTP AUTH for the mailbox or use an app password/OAuth-based relay."
+                        "Switch SMTP_AUTH_METHOD=xoauth2 and provide SMTP_OAUTH2_USER + SMTP_OAUTH2_ACCESS_TOKEN."
                     ) from exc
                 raise ValueError(f"SMTP authentication failed: {server_message}") from exc
 
         await asyncio.to_thread(_send)
+
+    def _authenticate_smtp(self, smtp: smtplib.SMTP) -> None:
+        if settings.smtp_auth_method == "none":
+            return
+
+        if settings.smtp_auth_method == "basic":
+            if settings.smtp_username and settings.smtp_password:
+                smtp.login(settings.smtp_username, settings.smtp_password.get_secret_value())
+            return
+
+        if settings.smtp_auth_method == "xoauth2":
+            oauth_user = settings.smtp_oauth2_user or settings.smtp_username or settings.smtp_from_email
+            if not oauth_user or not settings.smtp_oauth2_access_token:
+                raise ValueError("SMTP_OAUTH2_USER and SMTP_OAUTH2_ACCESS_TOKEN must be configured for xoauth2 auth")
+
+            auth_string = f"user={oauth_user}\x01auth=Bearer {settings.smtp_oauth2_access_token.get_secret_value()}\x01\x01"
+            encoded_auth = base64.b64encode(auth_string.encode("utf-8")).decode("ascii")
+            code, response = smtp.docmd("AUTH", "XOAUTH2 " + encoded_auth)
+            if code != 235:
+                decoded = response.decode("utf-8", errors="ignore")
+                raise smtplib.SMTPAuthenticationError(code, response if isinstance(response, bytes) else decoded.encode())
 
     def _build_prompt(self, config: PropertyAgentConfig) -> str:
         domains = "\n".join([f"- {site}" for site in config.websites_to_search])
@@ -316,3 +337,9 @@ class PropertySearchAgent:
             raise ValueError("OPENAI_API_KEY must be configured")
         if not settings.smtp_host or not settings.smtp_from_email or not settings.smtp_result_recipient:
             raise ValueError("SMTP settings must be configured, including SMTP_RESULT_RECIPIENT")
+        if settings.smtp_auth_method == "basic" and settings.smtp_username and not settings.smtp_password:
+            raise ValueError("SMTP_PASSWORD must be configured when SMTP_AUTH_METHOD=basic and SMTP_USERNAME is set")
+        if settings.smtp_auth_method == "xoauth2":
+            oauth_user = settings.smtp_oauth2_user or settings.smtp_username or settings.smtp_from_email
+            if not oauth_user or not settings.smtp_oauth2_access_token:
+                raise ValueError("SMTP_OAUTH2_USER (or SMTP_USERNAME/SMTP_FROM_EMAIL) and SMTP_OAUTH2_ACCESS_TOKEN are required for SMTP_AUTH_METHOD=xoauth2")
