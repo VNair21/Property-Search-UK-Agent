@@ -299,19 +299,19 @@ class PropertySearchAgent:
             bot_token = settings.telegram_bot_token.get_secret_value()
             base_url = settings.telegram_api_base_url.rstrip("/")
             endpoint = f"{base_url}/bot{bot_token}/sendMessage"
-            part_prefix_reserve = 64
-            messages = self._split_for_telegram(text, self.TELEGRAM_MAX_MESSAGE_LENGTH - part_prefix_reserve)
+            messages = self._split_for_telegram(text)
 
             for index, message in enumerate(messages):
                 escaped_message = self._escape_telegram_html(message)
+                wrapped_text = (
+                    f"<pre>{escaped_message}</pre>"
+                    if len(messages) == 1
+                    else f"<pre>(Part {index + 1}/{len(messages)})\n{escaped_message}</pre>"
+                )
                 payload = parse.urlencode(
                     {
                         "chat_id": settings.telegram_chat_id,
-                        "text": (
-                            f"<pre>{escaped_message}</pre>"
-                            if len(messages) == 1
-                            else f"<pre>(Part {index + 1}/{len(messages)})\n{escaped_message}</pre>"
-                        ),
+                        "text": wrapped_text,
                         "parse_mode": "HTML",
                     }
                 ).encode("utf-8")
@@ -324,26 +324,71 @@ class PropertySearchAgent:
 
         await asyncio.to_thread(_send)
 
-    def _split_for_telegram(self, text: str, max_length: int | None = None) -> list[str]:
-        chunk_size = max_length or self.TELEGRAM_MAX_MESSAGE_LENGTH
-        if len(text) <= chunk_size:
-            return [text]
+    def _split_for_telegram(self, text: str) -> list[str]:
+        wrapper_length = len("<pre></pre>")
+
+        chunks = self._split_for_telegram_by_escaped_length(
+            text,
+            self.TELEGRAM_MAX_MESSAGE_LENGTH - wrapper_length,
+        )
+        if len(chunks) == 1:
+            return chunks
+
+        previous_count = -1
+        for _ in range(5):
+            total_parts = len(chunks)
+            max_prefix_len = max(
+                len(f"(Part {index + 1}/{total_parts})\n")
+                for index in range(total_parts)
+            )
+            chunks = self._split_for_telegram_by_escaped_length(
+                text,
+                self.TELEGRAM_MAX_MESSAGE_LENGTH - wrapper_length - max_prefix_len,
+            )
+            if len(chunks) == previous_count:
+                break
+            previous_count = len(chunks)
+
+        return chunks
+
+    def _split_for_telegram_by_escaped_length(self, text: str, max_escaped_length: int) -> list[str]:
+        if max_escaped_length <= 0:
+            raise ValueError("Telegram max escaped message length must be positive")
 
         chunks: list[str] = []
-        lines = text.splitlines(keepends=True)
         current = ""
 
-        for line in lines:
-            if len(line) > chunk_size:
+        def escaped_length(value: str) -> int:
+            return len(self._escape_telegram_html(value))
+
+        def split_long_segment(segment: str) -> list[str]:
+            parts: list[str] = []
+            part = ""
+            for char in segment:
+                candidate = part + char
+                if escaped_length(candidate) > max_escaped_length:
+                    if part:
+                        parts.append(part.rstrip())
+                    part = char
+                    if escaped_length(part) > max_escaped_length:
+                        raise ValueError("Unable to split Telegram message within escaped length limit")
+                else:
+                    part = candidate
+            if part:
+                parts.append(part.rstrip())
+            return parts
+
+        for line in text.splitlines(keepends=True):
+            if escaped_length(line) > max_escaped_length:
                 if current:
                     chunks.append(current.rstrip())
                     current = ""
-                for start in range(0, len(line), chunk_size):
-                    chunks.append(line[start : start + chunk_size].rstrip())
+                chunks.extend(split_long_segment(line))
                 continue
 
-            if len(current) + len(line) > chunk_size:
-                chunks.append(current.rstrip())
+            if escaped_length(current + line) > max_escaped_length:
+                if current:
+                    chunks.append(current.rstrip())
                 current = line
             else:
                 current += line
@@ -351,7 +396,7 @@ class PropertySearchAgent:
         if current:
             chunks.append(current.rstrip())
 
-        return chunks
+        return chunks or [""]
 
     def _authenticate_smtp(self, smtp: smtplib.SMTP) -> None:
         if settings.smtp_auth_method == "none":
