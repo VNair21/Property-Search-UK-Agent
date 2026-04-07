@@ -4,6 +4,21 @@ from typing import Literal
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Load order (first found wins per variable):
+# 1) OS environment variables
+# 2) backend/.env.local (repo root execution)
+# 3) backend/.env (repo root execution)
+# 4) .env.local (backend directory execution)
+# 5) .env (backend directory execution)
+#
+# This keeps secrets out of git while still making local development easy.
+ENV_FILE_CANDIDATES = (
+    "backend/.env.local",
+    "backend/.env",
+    ".env.local",
+    ".env",
+)
+
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
