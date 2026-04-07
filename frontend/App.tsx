@@ -79,6 +79,17 @@ const frequencyToMinutes: Record<FrequencyOption, number> = {
   Weekly: 7 * 24 * 60,
   Monthly: 30 * 24 * 60,
 };
+const minutesToFrequencyLabel = (minutes: number | null): FrequencyOption | null => {
+  if (minutes === null) {
+    return null;
+  }
+
+  const frequencyMatch = Object.entries(frequencyToMinutes).find(
+    ([_label, optionMinutes]) => optionMinutes === minutes,
+  );
+
+  return frequencyMatch ? (frequencyMatch[0] as FrequencyOption) : null;
+};
 
 const findingsToMarkdown = (findings: AgentFinding[]): string =>
   [
@@ -113,6 +124,7 @@ export default function App() {
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
   const [isAgentRunning, setIsAgentRunning] = useState<boolean>(false);
   const [hideCachedFindings, setHideCachedFindings] = useState<boolean>(false);
+  const [agentUpdateFrequency, setAgentUpdateFrequency] = useState<FrequencyOption | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [resultTable, setResultTable] = useState<string>('');
@@ -139,20 +151,17 @@ export default function App() {
     if (payload.is_running) {
       setHideCachedFindings(false);
     }
+    setAgentUpdateFrequency(minutesToFrequencyLabel(payload.update_frequency_minutes));
 
     if (payload.update_frequency_minutes !== null && !hasUnsavedFrequencySelection) {
-      const frequencyMatch = Object.entries(frequencyToMinutes).find(
-        ([_label, minutes]) => minutes === payload.update_frequency_minutes,
-      );
+      const frequencyMatch = minutesToFrequencyLabel(payload.update_frequency_minutes);
       if (frequencyMatch) {
-        setUpdateFrequency(frequencyMatch[0] as FrequencyOption);
+        setUpdateFrequency(frequencyMatch);
       }
     } else if (payload.update_frequency_minutes !== null && shouldSyncFrequencySelection) {
-      const frequencyMatch = Object.entries(frequencyToMinutes).find(
-        ([_label, minutes]) => minutes === payload.update_frequency_minutes,
-      );
+      const frequencyMatch = minutesToFrequencyLabel(payload.update_frequency_minutes);
       if (frequencyMatch) {
-        setUpdateFrequency(frequencyMatch[0] as FrequencyOption);
+        setUpdateFrequency(frequencyMatch);
       }
       setHasUnsavedFrequencySelection(false);
     }
@@ -257,6 +266,7 @@ export default function App() {
 
       setIsAgentRunning(true);
       setHideCachedFindings(false);
+      setAgentUpdateFrequency(updateFrequency);
       setHasUnsavedFrequencySelection(false);
       setStatusMessage(
         `Agent running. Searching every ${frequencyMinutes} minutes and sending updates via the configured notification channel.`,
@@ -418,6 +428,11 @@ export default function App() {
           <View style={[styles.statusDot, isAgentRunning ? styles.statusDotRunning : styles.statusDotStopped]} />
           <Text style={styles.statusText}>{statusLabel}</Text>
         </View>
+        {isAgentRunning && agentUpdateFrequency ? (
+          <Text style={styles.frequencyStatusText}>
+            Running with {agentUpdateFrequency.toLowerCase()} updates.
+          </Text>
+        ) : null}
         {statusMessage ? <Text style={styles.statusMessage}>{statusMessage}</Text> : null}
         {resultTable ? (
           <View style={styles.resultsCard}>
@@ -605,6 +620,12 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#38404f',
     fontWeight: '500',
+  },
+  frequencyStatusText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#515765',
+    textAlign: 'center',
   },
   statusMessage: {
     marginTop: 12,
