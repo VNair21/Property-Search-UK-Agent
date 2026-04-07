@@ -74,6 +74,7 @@ const redisKeys = {
   criteria: 'property_agent:criteria',
   frequencyLabel: 'property_agent:frequency_label',
   frequencyMinutes: 'property_agent:frequency_minutes',
+  runTimeUk: 'property_agent:run_time_uk',
 } as const;
 
 const frequencyToMinutes: Record<FrequencyOption, number> = {
@@ -113,6 +114,7 @@ export default function App() {
   const [areas, setAreas] = useState<string>('');
   const [criteria, setCriteria] = useState<string>('');
   const [updateFrequency, setUpdateFrequency] = useState<FrequencyOption>('Daily');
+  const [runTimeUk, setRunTimeUk] = useState<string>('');
   const [hasUnsavedFrequencySelection, setHasUnsavedFrequencySelection] = useState<boolean>(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
   const [isAgentRunning, setIsAgentRunning] = useState<boolean>(false);
@@ -200,11 +202,12 @@ export default function App() {
       };
 
       try {
-        const [savedWebsites, savedAreas, savedCriteria, savedFrequency] = await Promise.all([
+        const [savedWebsites, savedAreas, savedCriteria, savedFrequency, savedRunTimeUk] = await Promise.all([
           readKey(redisKeys.websites),
           readKey(redisKeys.areas),
           readKey(redisKeys.criteria),
           readKey(redisKeys.frequencyLabel),
+          readKey(redisKeys.runTimeUk),
         ]);
 
         if (savedWebsites !== null) {
@@ -218,6 +221,9 @@ export default function App() {
         }
         if (savedFrequency !== null && (frequencyOptions as string[]).includes(savedFrequency)) {
           setUpdateFrequency(savedFrequency as FrequencyOption);
+        }
+        if (savedRunTimeUk !== null) {
+          setRunTimeUk(savedRunTimeUk);
         }
 
         await fetchAgentStatus({ syncFrequencySelection: true });
@@ -241,6 +247,7 @@ export default function App() {
       [redisKeys.criteria]: criteria,
       [redisKeys.frequencyLabel]: updateFrequency,
       [redisKeys.frequencyMinutes]: frequencyMinutes,
+      [redisKeys.runTimeUk]: runTimeUk.trim(),
     };
     let agentStarted = false;
     let latestResultFindings: AgentFinding[] = [];
@@ -376,39 +383,54 @@ export default function App() {
           <View style={styles.divider} />
 
           <View style={styles.fieldBlock}>
-            <Text style={styles.label}>Update Frequency</Text>
-            <Pressable
-              style={({ pressed }) => [
-                styles.dropdownTrigger,
-                pressed ? styles.pressablePressed : undefined,
-              ]}
-              onPress={() => setIsDropdownOpen((prev) => !prev)}
-            >
-              <Text style={styles.dropdownValue}>{updateFrequency}</Text>
-              <Text style={styles.dropdownChevron}>⌄</Text>
-            </Pressable>
+            <View style={styles.frequencyTimeRow}>
+              <View style={styles.halfField}>
+                <Text style={styles.label}>Update Frequency</Text>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.dropdownTrigger,
+                    pressed ? styles.pressablePressed : undefined,
+                  ]}
+                  onPress={() => setIsDropdownOpen((prev) => !prev)}
+                >
+                  <Text style={styles.dropdownValue}>{updateFrequency}</Text>
+                  <Text style={styles.dropdownChevron}>⌄</Text>
+                </Pressable>
 
-            {isDropdownOpen ? (
-              <View style={styles.dropdownMenu}>
-                {frequencyOptions.map((option) => {
-                  const isSelected = option === updateFrequency;
-                  return (
-                    <Pressable
-                      key={option}
-                      style={({ pressed }) => [
-                        styles.dropdownItem,
-                        isSelected ? styles.dropdownItemSelected : undefined,
-                        pressed ? styles.pressablePressed : undefined,
-                      ]}
-                      onPress={() => onSelectFrequency(option)}
-                    >
-                      <Text style={styles.dropdownItemText}>{option}</Text>
-                      {isSelected ? <Text style={styles.checkmark}>✓</Text> : null}
-                    </Pressable>
-                  );
-                })}
+                {isDropdownOpen ? (
+                  <View style={styles.dropdownMenu}>
+                    {frequencyOptions.map((option) => {
+                      const isSelected = option === updateFrequency;
+                      return (
+                        <Pressable
+                          key={option}
+                          style={({ pressed }) => [
+                            styles.dropdownItem,
+                            isSelected ? styles.dropdownItemSelected : undefined,
+                            pressed ? styles.pressablePressed : undefined,
+                          ]}
+                          onPress={() => onSelectFrequency(option)}
+                        >
+                          <Text style={styles.dropdownItemText}>{option}</Text>
+                          {isSelected ? <Text style={styles.checkmark}>✓</Text> : null}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : null}
               </View>
-            ) : null}
+
+              <View style={styles.halfField}>
+                <Text style={styles.label}>Time (UK)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. 09:00"
+                  placeholderTextColor="#8f939b"
+                  value={runTimeUk}
+                  onChangeText={setRunTimeUk}
+                />
+              </View>
+            </View>
           </View>
         </View>
 
@@ -525,6 +547,14 @@ const styles = StyleSheet.create({
   },
   fieldBlock: {
     paddingVertical: 10,
+  },
+  frequencyTimeRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-start',
+  },
+  halfField: {
+    flex: 1,
   },
   label: {
     fontSize: 21 / 2,
