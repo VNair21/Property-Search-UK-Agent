@@ -13,6 +13,18 @@ import {
 } from 'react-native';
 
 type FrequencyOption = 'Hourly' | 'Daily' | 'Weekly' | 'Monthly';
+type AgentFinding = {
+  rank: number;
+  property: string;
+  price: string;
+  size_sqm: string;
+  pounds_per_sqm: string;
+  service_charge: string;
+  ground_rent: string;
+  location: string;
+  key_strengths: string;
+  main_issues: string;
+};
 
 const frequencyOptions: FrequencyOption[] = ['Hourly', 'Daily', 'Weekly', 'Monthly'];
 
@@ -67,14 +79,52 @@ const frequencyToMinutes: Record<FrequencyOption, number> = {
   Weekly: 7 * 24 * 60,
   Monthly: 30 * 24 * 60,
 };
+const minutesToFrequencyLabel = (minutes: number | null): FrequencyOption | null => {
+  if (minutes === null) {
+    return null;
+  }
+
+  const frequencyMatch = Object.entries(frequencyToMinutes).find(
+    ([_label, optionMinutes]) => optionMinutes === minutes,
+  );
+
+  return frequencyMatch ? (frequencyMatch[0] as FrequencyOption) : null;
+};
+
+const findingsToMarkdown = (findings: AgentFinding[]): string =>
+  [
+    '| Rank | Property | Price | Size (sqm) | £/sqm | Service Charge | Ground Rent | Location | Key Strengths | Main Issues |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    ...findings.map((finding) =>
+      [
+        finding.rank,
+        finding.property,
+        finding.price,
+        finding.size_sqm,
+        finding.pounds_per_sqm,
+        finding.service_charge,
+        finding.ground_rent,
+        finding.location,
+        finding.key_strengths,
+        finding.main_issues,
+      ]
+        .map((value) => String(value).replaceAll('|', '\\|').replaceAll('\n', ' '))
+        .join(' | '),
+    ),
+  ]
+    .map((line) => (line.startsWith('|') ? line : `| ${line} |`))
+    .join('\n');
 
 export default function App() {
   const [websites, setWebsites] = useState<string>('');
   const [areas, setAreas] = useState<string>('');
   const [criteria, setCriteria] = useState<string>('');
   const [updateFrequency, setUpdateFrequency] = useState<FrequencyOption>('Daily');
+  const [hasUnsavedFrequencySelection, setHasUnsavedFrequencySelection] = useState<boolean>(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
   const [isAgentRunning, setIsAgentRunning] = useState<boolean>(false);
+  const [hideCachedFindings, setHideCachedFindings] = useState<boolean>(false);
+  const [agentUpdateFrequency, setAgentUpdateFrequency] = useState<FrequencyOption | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [resultTable, setResultTable] = useState<string>('');
@@ -83,6 +133,43 @@ export default function App() {
     () => (isAgentRunning ? 'Agent Running' : 'Agent Stopped'),
     [isAgentRunning],
   );
+
+  const fetchAgentStatus = async (options?: { syncFrequencySelection?: boolean }) => {
+    const shouldSyncFrequencySelection = options?.syncFrequencySelection ?? false;
+    const response = await fetch(buildApiUrl('/property-agent/status'));
+    if (!response.ok) {
+      throw new Error('Failed to load property agent status');
+    }
+
+    const payload = (await response.json()) as {
+      is_running: boolean;
+      update_frequency_minutes: number | null;
+      findings: AgentFinding[];
+    };
+
+    setIsAgentRunning(payload.is_running);
+    if (payload.is_running) {
+      setHideCachedFindings(false);
+    }
+    setAgentUpdateFrequency(minutesToFrequencyLabel(payload.update_frequency_minutes));
+
+    if (payload.update_frequency_minutes !== null && !hasUnsavedFrequencySelection) {
+      const frequencyMatch = minutesToFrequencyLabel(payload.update_frequency_minutes);
+      if (frequencyMatch) {
+        setUpdateFrequency(frequencyMatch);
+      }
+    } else if (payload.update_frequency_minutes !== null && shouldSyncFrequencySelection) {
+      const frequencyMatch = minutesToFrequencyLabel(payload.update_frequency_minutes);
+      if (frequencyMatch) {
+        setUpdateFrequency(frequencyMatch);
+      }
+      setHasUnsavedFrequencySelection(false);
+    }
+
+    const hasFindings = payload.findings.length > 0;
+    const shouldShowFindings = hasFindings && !hideCachedFindings;
+    setResultTable(shouldShowFindings ? findingsToMarkdown(payload.findings) : '');
+  };
 
   useEffect(() => {
     const loadSavedSearch = async () => {
@@ -119,9 +206,11 @@ export default function App() {
         if (savedFrequency !== null && (frequencyOptions as string[]).includes(savedFrequency)) {
           setUpdateFrequency(savedFrequency as FrequencyOption);
         }
+
+        await fetchAgentStatus({ syncFrequencySelection: true });
       } catch (error) {
         setStatusMessage(
-          `Could not load saved search configuration: ${(error as Error).message}`,
+          `Could not load saved configuration or agent status: ${(error as Error).message}`,
         );
       }
     };
@@ -176,6 +265,9 @@ export default function App() {
       }
 
       setIsAgentRunning(true);
+      setHideCachedFindings(false);
+      setAgentUpdateFrequency(updateFrequency);
+      setHasUnsavedFrequencySelection(false);
       setStatusMessage(
         `Agent running. Searching every ${frequencyMinutes} minutes and sending updates via the configured notification channel.`,
       );
@@ -200,6 +292,7 @@ export default function App() {
         throw new Error('Failed to cancel property agent');
       }
       setIsAgentRunning(false);
+      setHideCachedFindings(true);
       setResultTable('');
       setStatusMessage('Property agent cancelled. No further scheduled searches will run.');
     } catch (error) {
@@ -207,8 +300,19 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      void fetchAgentStatus().catch(() => {
+        // Keep the most recent UI state if status polling fails transiently.
+      });
+    }, 15000);
+
+    return () => clearInterval(intervalId);
+  }, []);
+
   const onSelectFrequency = (option: FrequencyOption) => {
     setUpdateFrequency(option);
+    setHasUnsavedFrequencySelection(true);
     setIsDropdownOpen(false);
   };
 
@@ -324,6 +428,11 @@ export default function App() {
           <View style={[styles.statusDot, isAgentRunning ? styles.statusDotRunning : styles.statusDotStopped]} />
           <Text style={styles.statusText}>{statusLabel}</Text>
         </View>
+        {isAgentRunning && agentUpdateFrequency ? (
+          <Text style={styles.frequencyStatusText}>
+            Running with {agentUpdateFrequency.toLowerCase()} updates.
+          </Text>
+        ) : null}
         {statusMessage ? <Text style={styles.statusMessage}>{statusMessage}</Text> : null}
         {resultTable ? (
           <View style={styles.resultsCard}>
@@ -511,6 +620,12 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#38404f',
     fontWeight: '500',
+  },
+  frequencyStatusText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#515765',
+    textAlign: 'center',
   },
   statusMessage: {
     marginTop: 12,
