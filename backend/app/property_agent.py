@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import smtplib
+from urllib import parse, request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from email.mime.text import MIMEText
@@ -89,6 +90,7 @@ class PropertyAgentSetResponse(BaseModel):
     status: str
     model: str
     update_frequency_minutes: int
+    notification_channel: str
     recipient: str
     findings: list[PropertyFinding]
     table_markdown: str
@@ -121,7 +123,7 @@ class PropertySearchAgent:
         findings, table = await self._run_single_search(config)
         await self._save_config(redis_client, config)
         await self._save_results(redis_client, findings)
-        await self._send_email(findings, table, config)
+        recipient = await self._send_results(findings, table, config)
 
         async with self._state.lock:
             if self._state.task:
@@ -139,7 +141,8 @@ class PropertySearchAgent:
             status="running",
             model=config.model,
             update_frequency_minutes=config.update_frequency_minutes,
-            recipient=settings.smtp_result_recipient,
+            notification_channel=settings.notification_channel,
+            recipient=recipient,
             findings=findings,
             table_markdown=table,
         )
@@ -183,7 +186,7 @@ class PropertySearchAgent:
                 await asyncio.sleep(config.update_frequency_minutes * 60)
                 findings, table = await self._run_single_search(config)
                 await self._save_results(redis_client, findings)
-                await self._send_email(findings, table, config)
+                await self._send_results(findings, table, config)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # pragma: no cover
@@ -227,6 +230,14 @@ class PropertySearchAgent:
             ),
         )
 
+    async def _send_results(self, findings: list[PropertyFinding], table_markdown: str, config: PropertyAgentConfig) -> str:
+        if settings.notification_channel == "email":
+            await self._send_email(findings, table_markdown, config)
+            return settings.smtp_result_recipient
+
+        await self._send_telegram(findings, table_markdown, config)
+        return settings.telegram_chat_id
+
     async def _send_email(self, findings: list[PropertyFinding], table_markdown: str, config: PropertyAgentConfig) -> None:
         message = MIMEText(
             "\n".join(
@@ -262,6 +273,41 @@ class PropertySearchAgent:
                         "Switch SMTP_AUTH_METHOD=xoauth2 and provide SMTP_OAUTH2_USER + SMTP_OAUTH2_ACCESS_TOKEN."
                     ) from exc
                 raise ValueError(f"SMTP authentication failed: {server_message}") from exc
+
+        await asyncio.to_thread(_send)
+
+    async def _send_telegram(self, findings: list[PropertyFinding], table_markdown: str, config: PropertyAgentConfig) -> None:
+        text = "\n".join(
+            [
+                "🏠 Property Search Agent Results",
+                f"Model: {config.model}",
+                f"Websites: {', '.join(config.websites_to_search)}",
+                f"Areas: {', '.join(config.areas_to_search)}",
+                f"Criteria: {config.property_criteria}",
+                "",
+                table_markdown,
+            ]
+        )
+
+        def _send() -> None:
+            if not settings.telegram_bot_token:
+                raise ValueError("TELEGRAM_BOT_TOKEN must be configured for Telegram notifications")
+
+            bot_token = settings.telegram_bot_token.get_secret_value()
+            base_url = settings.telegram_api_base_url.rstrip("/")
+            endpoint = f"{base_url}/bot{bot_token}/sendMessage"
+            payload = parse.urlencode(
+                {
+                    "chat_id": settings.telegram_chat_id,
+                    "text": text,
+                }
+            ).encode("utf-8")
+            req = request.Request(endpoint, data=payload, method="POST")
+            with request.urlopen(req, timeout=20) as response:
+                body = response.read().decode("utf-8", errors="ignore")
+                parsed = json.loads(body)
+                if not parsed.get("ok"):
+                    raise ValueError(f"Telegram API error: {parsed.get('description', 'Unknown error')}")
 
         await asyncio.to_thread(_send)
 
@@ -335,6 +381,11 @@ class PropertySearchAgent:
     def _validate_runtime_settings(self) -> None:
         if not settings.openai_api_key:
             raise ValueError("OPENAI_API_KEY must be configured")
+        if settings.notification_channel == "telegram":
+            if not settings.telegram_bot_token or not settings.telegram_chat_id:
+                raise ValueError("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be configured for Telegram notifications")
+            return
+
         if not settings.smtp_host or not settings.smtp_from_email or not settings.smtp_result_recipient:
             raise ValueError("SMTP settings must be configured, including SMTP_RESULT_RECIPIENT")
         if settings.smtp_auth_method == "basic" and settings.smtp_username and not settings.smtp_password:

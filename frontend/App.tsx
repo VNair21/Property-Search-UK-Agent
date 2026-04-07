@@ -176,7 +176,9 @@ export default function App() {
       }
 
       setIsAgentRunning(true);
-      setStatusMessage(`Agent running. Searching every ${frequencyMinutes} minutes and emailing results.`);
+      setStatusMessage(
+        `Agent running. Searching every ${frequencyMinutes} minutes and sending updates via the configured notification channel.`,
+      );
       setResultTable(latestResultTable);
     } catch (error) {
       setIsAgentRunning(agentStarted);
