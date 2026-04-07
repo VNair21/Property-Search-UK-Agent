@@ -276,6 +276,8 @@ class PropertySearchAgent:
 
         await asyncio.to_thread(_send)
 
+    TELEGRAM_MAX_MESSAGE_LENGTH = 4096
+
     async def _send_telegram(self, findings: list[PropertyFinding], table_markdown: str, config: PropertyAgentConfig) -> None:
         text = "\n".join(
             [
@@ -296,20 +298,53 @@ class PropertySearchAgent:
             bot_token = settings.telegram_bot_token.get_secret_value()
             base_url = settings.telegram_api_base_url.rstrip("/")
             endpoint = f"{base_url}/bot{bot_token}/sendMessage"
-            payload = parse.urlencode(
-                {
-                    "chat_id": settings.telegram_chat_id,
-                    "text": text,
-                }
-            ).encode("utf-8")
-            req = request.Request(endpoint, data=payload, method="POST")
-            with request.urlopen(req, timeout=20) as response:
-                body = response.read().decode("utf-8", errors="ignore")
-                parsed = json.loads(body)
-                if not parsed.get("ok"):
-                    raise ValueError(f"Telegram API error: {parsed.get('description', 'Unknown error')}")
+            part_prefix_reserve = 32
+            messages = self._split_for_telegram(text, self.TELEGRAM_MAX_MESSAGE_LENGTH - part_prefix_reserve)
+
+            for index, message in enumerate(messages):
+                payload = parse.urlencode(
+                    {
+                        "chat_id": settings.telegram_chat_id,
+                        "text": message if len(messages) == 1 else f"(Part {index + 1}/{len(messages)})\n{message}",
+                    }
+                ).encode("utf-8")
+                req = request.Request(endpoint, data=payload, method="POST")
+                with request.urlopen(req, timeout=20) as response:
+                    body = response.read().decode("utf-8", errors="ignore")
+                    parsed = json.loads(body)
+                    if not parsed.get("ok"):
+                        raise ValueError(f"Telegram API error: {parsed.get('description', 'Unknown error')}")
 
         await asyncio.to_thread(_send)
+
+    def _split_for_telegram(self, text: str, max_length: int | None = None) -> list[str]:
+        chunk_size = max_length or self.TELEGRAM_MAX_MESSAGE_LENGTH
+        if len(text) <= chunk_size:
+            return [text]
+
+        chunks: list[str] = []
+        lines = text.splitlines(keepends=True)
+        current = ""
+
+        for line in lines:
+            if len(line) > chunk_size:
+                if current:
+                    chunks.append(current.rstrip())
+                    current = ""
+                for start in range(0, len(line), chunk_size):
+                    chunks.append(line[start : start + chunk_size].rstrip())
+                continue
+
+            if len(current) + len(line) > chunk_size:
+                chunks.append(current.rstrip())
+                current = line
+            else:
+                current += line
+
+        if current:
+            chunks.append(current.rstrip())
+
+        return chunks
 
     def _authenticate_smtp(self, smtp: smtplib.SMTP) -> None:
         if settings.smtp_auth_method == "none":
