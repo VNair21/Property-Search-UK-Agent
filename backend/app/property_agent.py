@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import re
 import smtplib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -110,7 +111,8 @@ class AgentRunState:
 class PropertySearchAgent:
     def __init__(self) -> None:
         self._state = AgentRunState()
-        self._client = AsyncOpenAI(api_key=settings.openai_api_key)
+        api_key = settings.openai_api_key.get_secret_value() if settings.openai_api_key else None
+        self._client = AsyncOpenAI(api_key=api_key)
 
     async def configure_and_start(self, redis_client: Redis, request: PropertyAgentSetRequest) -> PropertyAgentSetResponse:
         self._validate_runtime_settings()
@@ -192,14 +194,23 @@ class PropertySearchAgent:
             model=config.model,
             input=prompt,
             tools=[{"type": "web_search_preview"}],
-            text={"format": {"type": "json_object"}},
         )
 
-        raw_text = response.output_text.strip().removeprefix("```json").removesuffix("```").strip()
+        raw_text = self._extract_json_payload(response.output_text)
         parsed = PropertySearchResult.model_validate_json(raw_text)
         findings = sorted(parsed.findings, key=lambda item: item.rank)[:10]
         renumbered = [item.model_copy(update={"rank": index}) for index, item in enumerate(findings, start=1)]
         return renumbered, self._to_markdown_table(renumbered)
+
+    def _extract_json_payload(self, output_text: str) -> str:
+        cleaned = output_text.strip().removeprefix("```json").removesuffix("```").strip()
+        if cleaned.startswith("{") and cleaned.endswith("}"):
+            return cleaned
+
+        match = re.search(r"\{[\s\S]*\}", cleaned)
+        if not match:
+            raise ValueError("Model response did not contain valid JSON")
+        return match.group(0)
 
     async def _save_config(self, redis_client: Redis, config: PropertyAgentConfig) -> None:
         await redis_client.set(AGENT_CONFIG_KEY, config.model_dump_json())
@@ -240,7 +251,7 @@ class PropertySearchAgent:
                 if settings.smtp_use_tls:
                     smtp.starttls()
                 if settings.smtp_username and settings.smtp_password:
-                    smtp.login(settings.smtp_username, settings.smtp_password)
+                    smtp.login(settings.smtp_username, settings.smtp_password.get_secret_value())
                 smtp.send_message(message)
 
         await asyncio.to_thread(_send)
