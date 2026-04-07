@@ -80,11 +80,13 @@ Development extras included in Compose:
   - `cp backend/.env.example backend/.env`
   - `cp frontend/.env.example frontend/.env`
 - Put sensitive values (for example `OPENAI_API_KEY`, `SMTP_PASSWORD`) only in your local `.env` files.
+- Do **not** put secrets in `backend/app/config.py`; that file only defines typed fields and defaults, and reads secret values from env files/runtime environment.
 - The repo `.gitignore` is configured to ignore `.env` / `.env.*` files while still allowing `.env.example` templates to be committed.
 
 ## Property agent environment variables
 
-Set these in `backend/.env` for the agentic layer (copy from `backend/.env.example` first):
+Set these in `backend/.env` for the agentic layer (copy from `backend/.env.example` first).  
+If you want machine-specific overrides, create `backend/.env.local`; the backend now loads `.env` first and then `.env.local` (so `.env.local` wins for conflicts).
 
 - `OPENAI_API_KEY` – required for OpenAI-based search
 - `DEFAULT_OPENAI_MODEL` – optional, defaults to `gpt-5`

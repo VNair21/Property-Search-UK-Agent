@@ -110,7 +110,8 @@ class AgentRunState:
 class PropertySearchAgent:
     def __init__(self) -> None:
         self._state = AgentRunState()
-        self._client = AsyncOpenAI(api_key=settings.openai_api_key)
+        api_key = settings.openai_api_key.get_secret_value() if settings.openai_api_key else None
+        self._client = AsyncOpenAI(api_key=api_key)
 
     async def configure_and_start(self, redis_client: Redis, request: PropertyAgentSetRequest) -> PropertyAgentSetResponse:
         self._validate_runtime_settings()
@@ -240,7 +241,7 @@ class PropertySearchAgent:
                 if settings.smtp_use_tls:
                     smtp.starttls()
                 if settings.smtp_username and settings.smtp_password:
-                    smtp.login(settings.smtp_username, settings.smtp_password)
+                    smtp.login(settings.smtp_username, settings.smtp_password.get_secret_value())
                 smtp.send_message(message)
 
         await asyncio.to_thread(_send)
