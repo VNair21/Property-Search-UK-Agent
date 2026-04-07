@@ -13,6 +13,18 @@ import {
 } from 'react-native';
 
 type FrequencyOption = 'Hourly' | 'Daily' | 'Weekly' | 'Monthly';
+type AgentFinding = {
+  rank: number;
+  property: string;
+  price: string;
+  size_sqm: string;
+  pounds_per_sqm: string;
+  service_charge: string;
+  ground_rent: string;
+  location: string;
+  key_strengths: string;
+  main_issues: string;
+};
 
 const frequencyOptions: FrequencyOption[] = ['Hourly', 'Daily', 'Weekly', 'Monthly'];
 
@@ -68,6 +80,30 @@ const frequencyToMinutes: Record<FrequencyOption, number> = {
   Monthly: 30 * 24 * 60,
 };
 
+const findingsToMarkdown = (findings: AgentFinding[]): string =>
+  [
+    '| Rank | Property | Price | Size (sqm) | £/sqm | Service Charge | Ground Rent | Location | Key Strengths | Main Issues |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    ...findings.map((finding) =>
+      [
+        finding.rank,
+        finding.property,
+        finding.price,
+        finding.size_sqm,
+        finding.pounds_per_sqm,
+        finding.service_charge,
+        finding.ground_rent,
+        finding.location,
+        finding.key_strengths,
+        finding.main_issues,
+      ]
+        .map((value) => String(value).replaceAll('|', '\\|').replaceAll('\n', ' '))
+        .join(' | '),
+    ),
+  ]
+    .map((line) => (line.startsWith('|') ? line : `| ${line} |`))
+    .join('\n');
+
 export default function App() {
   const [websites, setWebsites] = useState<string>('');
   const [areas, setAreas] = useState<string>('');
@@ -83,6 +119,33 @@ export default function App() {
     () => (isAgentRunning ? 'Agent Running' : 'Agent Stopped'),
     [isAgentRunning],
   );
+
+  const fetchAgentStatus = async () => {
+    const response = await fetch(buildApiUrl('/property-agent/status'));
+    if (!response.ok) {
+      throw new Error('Failed to load property agent status');
+    }
+
+    const payload = (await response.json()) as {
+      is_running: boolean;
+      update_frequency_minutes: number | null;
+      findings: AgentFinding[];
+    };
+
+    setIsAgentRunning(payload.is_running);
+
+    if (payload.update_frequency_minutes !== null) {
+      const frequencyMatch = Object.entries(frequencyToMinutes).find(
+        ([_label, minutes]) => minutes === payload.update_frequency_minutes,
+      );
+      if (frequencyMatch) {
+        setUpdateFrequency(frequencyMatch[0] as FrequencyOption);
+      }
+    }
+
+    const hasFindings = payload.findings.length > 0;
+    setResultTable(hasFindings ? findingsToMarkdown(payload.findings) : '');
+  };
 
   useEffect(() => {
     const loadSavedSearch = async () => {
@@ -119,9 +182,11 @@ export default function App() {
         if (savedFrequency !== null && (frequencyOptions as string[]).includes(savedFrequency)) {
           setUpdateFrequency(savedFrequency as FrequencyOption);
         }
+
+        await fetchAgentStatus();
       } catch (error) {
         setStatusMessage(
-          `Could not load saved search configuration: ${(error as Error).message}`,
+          `Could not load saved configuration or agent status: ${(error as Error).message}`,
         );
       }
     };
@@ -206,6 +271,16 @@ export default function App() {
       setStatusMessage(`Failed to cancel property agent: ${(error as Error).message}`);
     }
   };
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      void fetchAgentStatus().catch(() => {
+        // Keep the most recent UI state if status polling fails transiently.
+      });
+    }, 15000);
+
+    return () => clearInterval(intervalId);
+  }, []);
 
   const onSelectFrequency = (option: FrequencyOption) => {
     setUpdateFrequency(option);
