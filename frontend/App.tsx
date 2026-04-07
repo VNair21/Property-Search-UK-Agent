@@ -91,29 +91,18 @@ const minutesToFrequencyLabel = (minutes: number | null): FrequencyOption | null
   return frequencyMatch ? (frequencyMatch[0] as FrequencyOption) : null;
 };
 
-const findingsToMarkdown = (findings: AgentFinding[]): string =>
-  [
-    '| Rank | Property | Price | Size (sqm) | £/sqm | Service Charge | Ground Rent | Location | Key Strengths | Main Issues |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
-    ...findings.map((finding) =>
-      [
-        finding.rank,
-        finding.property,
-        finding.price,
-        finding.size_sqm,
-        finding.pounds_per_sqm,
-        finding.service_charge,
-        finding.ground_rent,
-        finding.location,
-        finding.key_strengths,
-        finding.main_issues,
-      ]
-        .map((value) => String(value).replaceAll('|', '\\|').replaceAll('\n', ' '))
-        .join(' | '),
-    ),
-  ]
-    .map((line) => (line.startsWith('|') ? line : `| ${line} |`))
-    .join('\n');
+const tableColumns: Array<{ key: keyof AgentFinding; label: string; width: number }> = [
+  { key: 'rank', label: 'Rank', width: 70 },
+  { key: 'property', label: 'Property', width: 240 },
+  { key: 'price', label: 'Price', width: 120 },
+  { key: 'size_sqm', label: 'Size (sqm)', width: 110 },
+  { key: 'pounds_per_sqm', label: '£/sqm', width: 100 },
+  { key: 'service_charge', label: 'Service Charge', width: 140 },
+  { key: 'ground_rent', label: 'Ground Rent', width: 130 },
+  { key: 'location', label: 'Location', width: 160 },
+  { key: 'key_strengths', label: 'Key Strengths', width: 240 },
+  { key: 'main_issues', label: 'Main Issues', width: 240 },
+];
 
 export default function App() {
   const [websites, setWebsites] = useState<string>('');
@@ -127,7 +116,7 @@ export default function App() {
   const [agentUpdateFrequency, setAgentUpdateFrequency] = useState<FrequencyOption | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
-  const [resultTable, setResultTable] = useState<string>('');
+  const [resultFindings, setResultFindings] = useState<AgentFinding[]>([]);
 
   const statusLabel = useMemo(
     () => (isAgentRunning ? 'Agent Running' : 'Agent Stopped'),
@@ -168,7 +157,7 @@ export default function App() {
 
     const hasFindings = payload.findings.length > 0;
     const shouldShowFindings = hasFindings && !hideCachedFindings;
-    setResultTable(shouldShowFindings ? findingsToMarkdown(payload.findings) : '');
+    setResultFindings(shouldShowFindings ? payload.findings : []);
   };
 
   useEffect(() => {
@@ -230,7 +219,7 @@ export default function App() {
       [redisKeys.frequencyMinutes]: frequencyMinutes,
     };
     let agentStarted = false;
-    let latestResultTable = '';
+    let latestResultFindings: AgentFinding[] = [];
 
     try {
       const response = await fetch(`${API_BASE_URL}/property-agent/set-search`, {
@@ -249,9 +238,9 @@ export default function App() {
         throw new Error(errorPayload.detail ?? 'Failed to create property search agent');
       }
 
-      const payload = (await response.json()) as { table_markdown: string };
+      const payload = (await response.json()) as { findings: AgentFinding[] };
       agentStarted = true;
-      latestResultTable = payload.table_markdown;
+      latestResultFindings = payload.findings;
 
       const kvResponse = await fetch(`${API_BASE_URL}/kv/bulk`, {
         method: 'POST',
@@ -271,10 +260,10 @@ export default function App() {
       setStatusMessage(
         `Agent running. Searching every ${frequencyMinutes} minutes and sending updates via the configured notification channel.`,
       );
-      setResultTable(latestResultTable);
+      setResultFindings(latestResultFindings);
     } catch (error) {
       setIsAgentRunning(agentStarted);
-      setResultTable(agentStarted ? latestResultTable : '');
+      setResultFindings(agentStarted ? latestResultFindings : []);
       setStatusMessage(
         agentStarted
           ? `Agent started, but failed to save search settings: ${(error as Error).message}`
@@ -293,7 +282,7 @@ export default function App() {
       }
       setIsAgentRunning(false);
       setHideCachedFindings(true);
-      setResultTable('');
+      setResultFindings([]);
       setStatusMessage('Property agent cancelled. No further scheduled searches will run.');
     } catch (error) {
       setStatusMessage(`Failed to cancel property agent: ${(error as Error).message}`);
@@ -434,11 +423,34 @@ export default function App() {
           </Text>
         ) : null}
         {statusMessage ? <Text style={styles.statusMessage}>{statusMessage}</Text> : null}
-        {resultTable ? (
+        {resultFindings.length > 0 ? (
           <View style={styles.resultsCard}>
             <Text style={styles.resultsTitle}>Latest Results (Top 10)</Text>
-            <ScrollView horizontal>
-              <Text style={styles.resultsTableText}>{resultTable}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View>
+                <View style={styles.tableHeaderRow}>
+                  {tableColumns.map((column) => (
+                    <Text
+                      key={`header-${column.key}`}
+                      style={[styles.tableHeaderCell, { width: column.width }]}
+                    >
+                      {column.label}
+                    </Text>
+                  ))}
+                </View>
+                {resultFindings.map((finding, rowIndex) => (
+                  <View
+                    key={`${finding.rank}-${finding.property}-${rowIndex}`}
+                    style={[styles.tableBodyRow, rowIndex % 2 === 0 ? styles.tableRowAlt : undefined]}
+                  >
+                    {tableColumns.map((column) => (
+                      <Text key={`${rowIndex}-${column.key}`} style={[styles.tableBodyCell, { width: column.width }]}>
+                        {String(finding[column.key])}
+                      </Text>
+                    ))}
+                  </View>
+                ))}
+              </View>
             </ScrollView>
           </View>
         ) : null}
@@ -645,9 +657,34 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     color: '#161923',
   },
-  resultsTableText: {
+  tableHeaderRow: {
+    flexDirection: 'row',
+    backgroundColor: '#f1f3f9',
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+  },
+  tableHeaderCell: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     fontSize: 12,
-    color: '#222',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontWeight: '700',
+    color: '#232838',
+    borderBottomWidth: 1,
+    borderBottomColor: '#dfe3ee',
+  },
+  tableBodyRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eceff6',
+  },
+  tableRowAlt: {
+    backgroundColor: '#fafbfe',
+  },
+  tableBodyCell: {
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#2d3446',
   },
 });

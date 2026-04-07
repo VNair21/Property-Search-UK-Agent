@@ -279,6 +279,7 @@ class PropertySearchAgent:
     TELEGRAM_MAX_MESSAGE_LENGTH = 4096
 
     async def _send_telegram(self, findings: list[PropertyFinding], table_markdown: str, config: PropertyAgentConfig) -> None:
+        telegram_table = self._to_telegram_table(findings)
         text = "\n".join(
             [
                 "🏠 Property Search Agent Results",
@@ -287,7 +288,7 @@ class PropertySearchAgent:
                 f"Areas: {', '.join(config.areas_to_search)}",
                 f"Criteria: {config.property_criteria}",
                 "",
-                table_markdown,
+                telegram_table,
             ]
         )
 
@@ -298,14 +299,20 @@ class PropertySearchAgent:
             bot_token = settings.telegram_bot_token.get_secret_value()
             base_url = settings.telegram_api_base_url.rstrip("/")
             endpoint = f"{base_url}/bot{bot_token}/sendMessage"
-            part_prefix_reserve = 32
+            part_prefix_reserve = 64
             messages = self._split_for_telegram(text, self.TELEGRAM_MAX_MESSAGE_LENGTH - part_prefix_reserve)
 
             for index, message in enumerate(messages):
+                escaped_message = self._escape_telegram_html(message)
                 payload = parse.urlencode(
                     {
                         "chat_id": settings.telegram_chat_id,
-                        "text": message if len(messages) == 1 else f"(Part {index + 1}/{len(messages)})\n{message}",
+                        "text": (
+                            f"<pre>{escaped_message}</pre>"
+                            if len(messages) == 1
+                            else f"<pre>(Part {index + 1}/{len(messages)})\n{escaped_message}</pre>"
+                        ),
+                        "parse_mode": "HTML",
                     }
                 ).encode("utf-8")
                 req = request.Request(endpoint, data=payload, method="POST")
@@ -412,6 +419,40 @@ class PropertySearchAgent:
             for item in findings
         ]
         return "\n".join([header, divider, *rows])
+
+    def _to_telegram_table(self, findings: list[PropertyFinding]) -> str:
+        if not findings:
+            return "No results returned."
+
+        columns = [
+            ("#", 2, lambda item: str(item.rank)),
+            ("Property", 28, lambda item: item.property),
+            ("Price", 12, lambda item: item.price),
+            ("Size", 10, lambda item: item.size_sqm),
+            ("£/sqm", 10, lambda item: item.pounds_per_sqm),
+            ("Location", 18, lambda item: item.location),
+        ]
+
+        def fit(value: str, width: int) -> str:
+            single_line = re.sub(r"\s+", " ", value.strip())
+            if len(single_line) <= width:
+                return single_line.ljust(width)
+            return f"{single_line[: max(width - 1, 0)]}…"
+
+        header = " | ".join([name.ljust(width) for name, width, _ in columns])
+        divider = "-+-".join(["-" * width for _, width, _ in columns])
+        rows = [
+            " | ".join([fit(extractor(item), width) for _, width, extractor in columns])
+            for item in findings
+        ]
+        return "\n".join([header, divider, *rows])
+
+    def _escape_telegram_html(self, text: str) -> str:
+        return (
+            text.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
 
     def _validate_runtime_settings(self) -> None:
         if not settings.openai_api_key:
