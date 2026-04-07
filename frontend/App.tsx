@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Linking,
   NativeModules,
   Platform,
   Pressable,
@@ -24,6 +25,7 @@ type AgentFinding = {
   location: string;
   key_strengths: string;
   main_issues: string;
+  listing_url: string;
 };
 
 const frequencyOptions: FrequencyOption[] = ['Hourly', 'Daily', 'Weekly', 'Monthly'];
@@ -102,6 +104,7 @@ const tableColumns: Array<{ key: keyof AgentFinding; label: string; width: numbe
   { key: 'location', label: 'Location', width: 160 },
   { key: 'key_strengths', label: 'Key Strengths', width: 240 },
   { key: 'main_issues', label: 'Main Issues', width: 240 },
+  { key: 'listing_url', label: 'Live Listing', width: 280 },
 ];
 
 export default function App() {
@@ -443,11 +446,24 @@ export default function App() {
                     key={`${finding.rank}-${finding.property}-${rowIndex}`}
                     style={[styles.tableBodyRow, rowIndex % 2 === 0 ? styles.tableRowAlt : undefined]}
                   >
-                    {tableColumns.map((column) => (
-                      <Text key={`${rowIndex}-${column.key}`} style={[styles.tableBodyCell, { width: column.width }]}>
-                        {String(finding[column.key])}
-                      </Text>
-                    ))}
+                    {tableColumns.map((column) =>
+                      column.key === 'listing_url' ? (
+                        <Pressable
+                          key={`${rowIndex}-${column.key}`}
+                          onPress={() => {
+                            void Linking.openURL(finding.listing_url);
+                          }}
+                        >
+                          <Text style={[styles.tableBodyCell, styles.linkCell, { width: column.width }]}>
+                            {finding.listing_url}
+                          </Text>
+                        </Pressable>
+                      ) : (
+                        <Text key={`${rowIndex}-${column.key}`} style={[styles.tableBodyCell, { width: column.width }]}>
+                          {String(finding[column.key])}
+                        </Text>
+                      ),
+                    )}
                   </View>
                 ))}
               </View>
@@ -686,5 +702,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     color: '#2d3446',
+  },
+  linkCell: {
+    color: '#2f6dfc',
+    textDecorationLine: 'underline',
   },
 });

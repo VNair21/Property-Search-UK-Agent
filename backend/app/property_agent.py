@@ -61,6 +61,7 @@ class PropertyFinding(BaseModel):
     location: str
     key_strengths: str
     main_issues: str
+    listing_url: str
 
 
 class PropertySearchResult(BaseModel):
@@ -428,24 +429,26 @@ class PropertySearchAgent:
             "1) Use only the websites listed below as sources.\n"
             "2) Search only within the areas listed below.\n"
             "3) Include only properties matching the criteria exactly.\n"
-            "4) Return at most 10 results.\n"
-            "5) Output must match this JSON schema: "
-            '{"findings":[{"rank":1,"property":"...","price":"...","size_sqm":"...","pounds_per_sqm":"...","service_charge":"...","ground_rent":"...","location":"...","key_strengths":"...","main_issues":"..."}]}.\n'
+            "4) Perform a deep search: run multiple targeted queries across each site, open and read each candidate listing page in detail, and review any linked floorplan documents/images before deciding whether to include it.\n"
+            "5) Return at most 10 results.\n"
+            "6) For every included result, provide the exact live listing URL where it was found.\n"
+            "7) Output must match this JSON schema: "
+            '{"findings":[{"rank":1,"property":"...","price":"...","size_sqm":"...","pounds_per_sqm":"...","service_charge":"...","ground_rent":"...","location":"...","key_strengths":"...","main_issues":"...","listing_url":"https://..."}]}.\n'
             "Websites to Search:\n"
             f"{domains}\n"
             "Areas to Search:\n"
             f"{areas}\n"
             "Property Criteria:\n"
             f"{config.property_criteria}\n"
-            "If exact data for a field is unavailable, write 'Not listed'."
+            "If exact data for a field is unavailable, write 'Not listed'. Never use 'Not listed' for listing_url."
         )
 
     def _to_markdown_table(self, findings: list[PropertyFinding]) -> str:
         header = (
             "| Rank | Property | Price | Size (sqm) | £/sqm | Service Charge | Ground Rent | Location | "
-            "Key Strengths | Main Issues |"
+            "Key Strengths | Main Issues | Listing URL |"
         )
-        divider = "|---|---|---|---|---|---|---|---|---|---|"
+        divider = "|---|---|---|---|---|---|---|---|---|---|---|"
         rows = [
             " | ".join(
                 [
@@ -458,7 +461,8 @@ class PropertySearchAgent:
                     item.ground_rent,
                     item.location,
                     item.key_strengths,
-                    f"{item.main_issues} |",
+                    item.main_issues,
+                    f"{item.listing_url} |",
                 ]
             )
             for item in findings
