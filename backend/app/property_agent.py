@@ -339,11 +339,11 @@ class PropertySearchAgent:
         telegram_table = self._to_telegram_table(findings)
         text = "\n".join(
             [
-                "🏠 Property Search Agent Results",
-                f"Model: {config.model}",
-                f"Websites: {', '.join(config.websites_to_search)}",
-                f"Areas: {', '.join(config.areas_to_search)}",
-                f"Criteria: {config.property_criteria}",
+                "🏠 <b>Property Search Agent Results</b>",
+                f"<b>Model:</b> {self._escape_telegram_html(config.model)}",
+                f"<b>Websites:</b> {self._escape_telegram_html(', '.join(config.websites_to_search))}",
+                f"<b>Areas:</b> {self._escape_telegram_html(', '.join(config.areas_to_search))}",
+                f"<b>Criteria:</b> {self._escape_telegram_html(config.property_criteria)}",
                 "",
                 telegram_table,
             ]
@@ -359,12 +359,7 @@ class PropertySearchAgent:
             messages = self._split_for_telegram(text)
 
             for index, message in enumerate(messages):
-                escaped_message = self._escape_telegram_html(message)
-                wrapped_text = (
-                    f"<pre>{escaped_message}</pre>"
-                    if len(messages) == 1
-                    else f"<pre>(Part {index + 1}/{len(messages)})\n{escaped_message}</pre>"
-                )
+                wrapped_text = message if len(messages) == 1 else f"<b>(Part {index + 1}/{len(messages)})</b>\n{message}"
                 payload = parse.urlencode(
                     {
                         "chat_id": settings.telegram_chat_id,
@@ -382,7 +377,7 @@ class PropertySearchAgent:
         await asyncio.to_thread(_send)
 
     def _split_for_telegram(self, text: str) -> list[str]:
-        wrapper_length = len("<pre></pre>")
+        wrapper_length = 0
 
         chunks = self._split_for_telegram_by_escaped_length(
             text,
@@ -395,7 +390,7 @@ class PropertySearchAgent:
         for _ in range(5):
             total_parts = len(chunks)
             max_prefix_len = max(
-                len(f"(Part {index + 1}/{total_parts})\n")
+                len(f"<b>(Part {index + 1}/{total_parts})</b>\n")
                 for index in range(total_parts)
             )
             chunks = self._split_for_telegram_by_escaped_length(
@@ -530,23 +525,23 @@ class PropertySearchAgent:
             return "No results returned."
 
         def clean(value: str) -> str:
-            return re.sub(r"\s+", " ", value.strip())
+            return self._escape_telegram_html(re.sub(r"\s+", " ", value.strip()))
 
         blocks = []
         for item in findings:
             blocks.append(
                 "\n".join(
                     [
-                        f"#{item.rank} — {clean(item.property)}",
-                        f"Price: {clean(item.price)}",
-                        f"Size: {clean(item.size_sqm)}",
-                        f"£/sqm: {clean(item.pounds_per_sqm)}",
-                        f"Service charge: {clean(item.service_charge)}",
-                        f"Ground rent: {clean(item.ground_rent)}",
-                        f"Location: {clean(item.location)}",
-                        f"Strengths: {clean(item.key_strengths)}",
-                        f"Issues: {clean(item.main_issues)}",
-                        f"URL: {clean(item.listing_url)}",
+                        f"<b>#{item.rank} — {clean(item.property)}</b>",
+                        f"<b>Price:</b> {clean(item.price)}",
+                        f"<b>Size:</b> {clean(item.size_sqm)}",
+                        f"<b>£/sqm:</b> {clean(item.pounds_per_sqm)}",
+                        f"<b>Service charge:</b> {clean(item.service_charge)}",
+                        f"<b>Ground rent:</b> {clean(item.ground_rent)}",
+                        f"<b>Location:</b> {clean(item.location)}",
+                        f"<b>Strengths:</b> {clean(item.key_strengths)}",
+                        f"<b>Issues:</b> {clean(item.main_issues)}",
+                        f"<b>URL:</b> {clean(item.listing_url)}",
                     ]
                 )
             )
