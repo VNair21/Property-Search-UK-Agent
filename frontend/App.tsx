@@ -29,6 +29,7 @@ type AgentFinding = {
 };
 
 const frequencyOptions: FrequencyOption[] = ['Hourly', 'Daily', 'Weekly', 'Monthly'];
+const isValidUkTime = (value: string): boolean => /^([01]\d|2[0-3]):([0-5]\d)$/.test(value.trim());
 
 const normalizeBaseUrl = (rawBaseUrl: string): string => rawBaseUrl.replace(/\/$/, '');
 
@@ -74,6 +75,7 @@ const redisKeys = {
   criteria: 'property_agent:criteria',
   frequencyLabel: 'property_agent:frequency_label',
   frequencyMinutes: 'property_agent:frequency_minutes',
+  runTimeUk: 'property_agent:run_time_uk',
 } as const;
 
 const frequencyToMinutes: Record<FrequencyOption, number> = {
@@ -113,11 +115,13 @@ export default function App() {
   const [areas, setAreas] = useState<string>('');
   const [criteria, setCriteria] = useState<string>('');
   const [updateFrequency, setUpdateFrequency] = useState<FrequencyOption>('Daily');
+  const [runTimeUk, setRunTimeUk] = useState<string>('');
   const [hasUnsavedFrequencySelection, setHasUnsavedFrequencySelection] = useState<boolean>(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
   const [isAgentRunning, setIsAgentRunning] = useState<boolean>(false);
   const [hideCachedFindings, setHideCachedFindings] = useState<boolean>(false);
   const [agentUpdateFrequency, setAgentUpdateFrequency] = useState<FrequencyOption | null>(null);
+  const [agentRunTimeUk, setAgentRunTimeUk] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [resultFindings, setResultFindings] = useState<AgentFinding[]>([]);
@@ -200,11 +204,12 @@ export default function App() {
       };
 
       try {
-        const [savedWebsites, savedAreas, savedCriteria, savedFrequency] = await Promise.all([
+        const [savedWebsites, savedAreas, savedCriteria, savedFrequency, savedRunTimeUk] = await Promise.all([
           readKey(redisKeys.websites),
           readKey(redisKeys.areas),
           readKey(redisKeys.criteria),
           readKey(redisKeys.frequencyLabel),
+          readKey(redisKeys.runTimeUk),
         ]);
 
         if (savedWebsites !== null) {
@@ -219,6 +224,10 @@ export default function App() {
         if (savedFrequency !== null && (frequencyOptions as string[]).includes(savedFrequency)) {
           setUpdateFrequency(savedFrequency as FrequencyOption);
         }
+        if (savedRunTimeUk !== null) {
+          setRunTimeUk(savedRunTimeUk);
+        }
+        setAgentRunTimeUk(savedRunTimeUk && savedRunTimeUk.trim().length > 0 ? savedRunTimeUk.trim() : null);
 
         await fetchAgentStatus({ syncFrequencySelection: true });
       } catch (error) {
@@ -232,15 +241,24 @@ export default function App() {
   }, []);
 
   const onStartAgent = async () => {
+    const trimmedRunTimeUk = runTimeUk.trim();
+    if (updateFrequency !== 'Hourly' && !isValidUkTime(trimmedRunTimeUk)) {
+      setStatusMessage('Please enter a valid Time (UK) in 24-hour format (HH:MM).');
+      return;
+    }
+
     setIsSaving(true);
     setStatusMessage('');
     const frequencyMinutes = frequencyToMinutes[updateFrequency].toString();
+    const runTimeUkForRequest =
+      updateFrequency === 'Hourly' ? null : trimmedRunTimeUk || null;
     const valuesByKey: Record<string, string> = {
       [redisKeys.websites]: websites,
       [redisKeys.areas]: areas,
       [redisKeys.criteria]: criteria,
       [redisKeys.frequencyLabel]: updateFrequency,
       [redisKeys.frequencyMinutes]: frequencyMinutes,
+      [redisKeys.runTimeUk]: trimmedRunTimeUk,
     };
     let agentStarted = false;
     let latestResultFindings: AgentFinding[] = [];
@@ -254,6 +272,7 @@ export default function App() {
           areas_to_search: areas,
           property_criteria: criteria,
           update_frequency_minutes: Number(frequencyMinutes),
+          run_time_uk: runTimeUkForRequest,
         }),
       });
 
@@ -280,9 +299,12 @@ export default function App() {
       setIsAgentRunning(true);
       setHideCachedFindings(false);
       setAgentUpdateFrequency(updateFrequency);
+      setAgentRunTimeUk(runTimeUkForRequest);
       setHasUnsavedFrequencySelection(false);
       setStatusMessage(
-        `Agent running. Searching every ${frequencyMinutes} minutes and sending updates via the configured notification channel.`,
+        updateFrequency === 'Hourly'
+          ? `Agent running. Searching every ${frequencyMinutes} minutes and sending updates via the configured notification channel.`
+          : `Agent running. First search completed; scheduled ${updateFrequency.toLowerCase()} at ${trimmedRunTimeUk} UK time.`,
       );
       setResultFindings(latestResultFindings);
     } catch (error) {
@@ -306,6 +328,7 @@ export default function App() {
       }
       setIsAgentRunning(false);
       setHideCachedFindings(true);
+      setAgentRunTimeUk(null);
       setResultFindings([]);
       setStatusMessage('Property agent cancelled. No further scheduled searches will run.');
     } catch (error) {
@@ -376,39 +399,59 @@ export default function App() {
           <View style={styles.divider} />
 
           <View style={styles.fieldBlock}>
-            <Text style={styles.label}>Update Frequency</Text>
-            <Pressable
-              style={({ pressed }) => [
-                styles.dropdownTrigger,
-                pressed ? styles.pressablePressed : undefined,
-              ]}
-              onPress={() => setIsDropdownOpen((prev) => !prev)}
-            >
-              <Text style={styles.dropdownValue}>{updateFrequency}</Text>
-              <Text style={styles.dropdownChevron}>⌄</Text>
-            </Pressable>
+            <View style={styles.frequencyTimeRow}>
+              <View style={styles.halfField}>
+                <Text style={styles.label}>Update Frequency</Text>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.dropdownTrigger,
+                    pressed ? styles.pressablePressed : undefined,
+                  ]}
+                  onPress={() => setIsDropdownOpen((prev) => !prev)}
+                >
+                  <Text style={styles.dropdownValue}>{updateFrequency}</Text>
+                  <Text style={styles.dropdownChevron}>⌄</Text>
+                </Pressable>
 
-            {isDropdownOpen ? (
-              <View style={styles.dropdownMenu}>
-                {frequencyOptions.map((option) => {
-                  const isSelected = option === updateFrequency;
-                  return (
-                    <Pressable
-                      key={option}
-                      style={({ pressed }) => [
-                        styles.dropdownItem,
-                        isSelected ? styles.dropdownItemSelected : undefined,
-                        pressed ? styles.pressablePressed : undefined,
-                      ]}
-                      onPress={() => onSelectFrequency(option)}
-                    >
-                      <Text style={styles.dropdownItemText}>{option}</Text>
-                      {isSelected ? <Text style={styles.checkmark}>✓</Text> : null}
-                    </Pressable>
-                  );
-                })}
+                {isDropdownOpen ? (
+                  <View style={styles.dropdownMenu}>
+                    {frequencyOptions.map((option) => {
+                      const isSelected = option === updateFrequency;
+                      return (
+                        <Pressable
+                          key={option}
+                          style={({ pressed }) => [
+                            styles.dropdownItem,
+                            isSelected ? styles.dropdownItemSelected : undefined,
+                            pressed ? styles.pressablePressed : undefined,
+                          ]}
+                          onPress={() => onSelectFrequency(option)}
+                        >
+                          <Text style={styles.dropdownItemText}>{option}</Text>
+                          {isSelected ? <Text style={styles.checkmark}>✓</Text> : null}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : null}
               </View>
-            ) : null}
+
+              <View style={styles.halfField}>
+                <Text style={styles.label}>Time (UK)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="e.g. 09:00"
+                  placeholderTextColor="#8f939b"
+                  value={runTimeUk}
+                  onChangeText={setRunTimeUk}
+                  keyboardType="numbers-and-punctuation"
+                  maxLength={5}
+                />
+                {runTimeUk.trim().length > 0 && !isValidUkTime(runTimeUk) ? (
+                  <Text style={styles.validationText}>Use 24-hour format HH:MM</Text>
+                ) : null}
+              </View>
+            </View>
           </View>
         </View>
 
@@ -444,6 +487,13 @@ export default function App() {
         {isAgentRunning && agentUpdateFrequency ? (
           <Text style={styles.frequencyStatusText}>
             Running with {agentUpdateFrequency.toLowerCase()} updates.
+          </Text>
+        ) : null}
+        {isAgentRunning ? (
+          <Text style={styles.frequencyStatusText}>
+            {agentUpdateFrequency === 'Hourly'
+              ? 'Time (UK) is not used for hourly schedules.'
+              : `Scheduled Time (UK): ${agentRunTimeUk ?? 'Not set'}`}
           </Text>
         ) : null}
         {statusMessage ? <Text style={styles.statusMessage}>{statusMessage}</Text> : null}
@@ -525,6 +575,19 @@ const styles = StyleSheet.create({
   },
   fieldBlock: {
     paddingVertical: 10,
+  },
+  frequencyTimeRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-start',
+  },
+  halfField: {
+    flex: 1,
+  },
+  validationText: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#b34b4a',
   },
   label: {
     fontSize: 21 / 2,

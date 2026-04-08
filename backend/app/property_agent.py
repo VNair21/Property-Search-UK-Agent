@@ -9,8 +9,9 @@ import re
 import smtplib
 from urllib import parse, request
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, time, timedelta, timezone
 from email.mime.text import MIMEText
+from zoneinfo import ZoneInfo
 
 from openai import AsyncOpenAI
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -22,6 +23,8 @@ logger = logging.getLogger(__name__)
 
 AGENT_CONFIG_KEY = "property_agent:config"
 AGENT_RESULTS_KEY = "property_agent:last_results"
+UK_TZ = ZoneInfo("Europe/London")
+UK_TIME_PATTERN = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
 
 class PropertyAgentConfig(BaseModel):
@@ -29,6 +32,7 @@ class PropertyAgentConfig(BaseModel):
     areas_to_search: list[str] = Field(min_length=1)
     property_criteria: str = Field(min_length=1)
     update_frequency_minutes: int = Field(ge=15)
+    run_time_uk: str | None = None
     model: str = Field(default=settings.default_openai_model)
 
     @field_validator("websites_to_search", "areas_to_search")
@@ -45,6 +49,21 @@ class PropertyAgentConfig(BaseModel):
         stripped = value.strip()
         if not stripped:
             raise ValueError("Property criteria cannot be empty")
+        return stripped
+
+    @field_validator("run_time_uk")
+    @classmethod
+    def validate_run_time_uk(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+
+        stripped = value.strip()
+        if not stripped:
+            return None
+
+        if not UK_TIME_PATTERN.match(stripped):
+            raise ValueError("Time (UK) must use 24-hour format HH:MM")
+
         return stripped
 
 
@@ -73,6 +92,7 @@ class PropertyAgentSetRequest(BaseModel):
     areas_to_search: str
     property_criteria: str
     update_frequency_minutes: int = Field(ge=15)
+    run_time_uk: str | None = None
     model: str | None = None
 
     def to_config(self) -> PropertyAgentConfig:
@@ -83,6 +103,7 @@ class PropertyAgentSetRequest(BaseModel):
             areas_to_search=areas,
             property_criteria=self.property_criteria,
             update_frequency_minutes=self.update_frequency_minutes,
+            run_time_uk=self.run_time_uk,
             model=self.model or settings.default_openai_model,
         )
 
@@ -91,6 +112,7 @@ class PropertyAgentSetResponse(BaseModel):
     status: str
     model: str
     update_frequency_minutes: int
+    run_time_uk: str | None = None
     notification_channel: str
     recipient: str
     findings: list[PropertyFinding]
@@ -100,6 +122,7 @@ class PropertyAgentSetResponse(BaseModel):
 class PropertyAgentStatus(BaseModel):
     is_running: bool
     update_frequency_minutes: int | None = None
+    run_time_uk: str | None = None
     model: str | None = None
     last_results_at: str | None = None
     findings: list[PropertyFinding] = Field(default_factory=list)
@@ -121,10 +144,12 @@ class PropertySearchAgent:
     async def configure_and_start(self, redis_client: Redis, request: PropertyAgentSetRequest) -> PropertyAgentSetResponse:
         self._validate_runtime_settings()
         config = request.to_config()
+        self._validate_schedule_inputs(config)
         findings, table = await self._run_single_search(config)
         await self._save_config(redis_client, config)
         await self._save_results(redis_client, findings)
         recipient = await self._send_results(findings, table, config)
+        first_run_at_utc = datetime.now(timezone.utc)
 
         async with self._state.lock:
             if self._state.task:
@@ -134,7 +159,7 @@ class PropertySearchAgent:
 
             self._state.config = config
             self._state.task = asyncio.create_task(
-                self._scheduler_loop(redis_client, config),
+                self._scheduler_loop(redis_client, config, first_run_at_utc),
                 name="property-search-agent",
             )
 
@@ -142,6 +167,7 @@ class PropertySearchAgent:
             status="running",
             model=config.model,
             update_frequency_minutes=config.update_frequency_minutes,
+            run_time_uk=config.run_time_uk,
             notification_channel=settings.notification_channel,
             recipient=recipient,
             findings=findings,
@@ -165,6 +191,7 @@ class PropertySearchAgent:
         return PropertyAgentStatus(
             is_running=self._state.task is not None and not self._state.task.done(),
             update_frequency_minutes=self._state.config.update_frequency_minutes if self._state.config else None,
+            run_time_uk=self._state.config.run_time_uk if self._state.config else None,
             model=self._state.config.model if self._state.config else None,
             last_results_at=last_results_at,
             findings=findings,
@@ -181,17 +208,46 @@ class PropertySearchAgent:
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
 
-    async def _scheduler_loop(self, redis_client: Redis, config: PropertyAgentConfig) -> None:
+    async def _scheduler_loop(self, redis_client: Redis, config: PropertyAgentConfig, first_run_at_utc: datetime) -> None:
+        last_run_at_utc = first_run_at_utc
         while True:
             try:
-                await asyncio.sleep(config.update_frequency_minutes * 60)
+                await asyncio.sleep(self._seconds_until_next_run(config, last_run_at_utc))
                 findings, table = await self._run_single_search(config)
                 await self._save_results(redis_client, findings)
                 await self._send_results(findings, table, config)
+                last_run_at_utc = datetime.now(timezone.utc)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # pragma: no cover
                 logger.exception("Property search agent run failed: %s", exc)
+                last_run_at_utc = datetime.now(timezone.utc)
+
+    def _validate_schedule_inputs(self, config: PropertyAgentConfig) -> None:
+        frequency_minutes = config.update_frequency_minutes
+        requires_run_time = frequency_minutes % (24 * 60) == 0
+        if requires_run_time and not config.run_time_uk:
+            raise ValueError("Time (UK) is required for daily, weekly, and monthly schedules")
+
+    def _seconds_until_next_run(self, config: PropertyAgentConfig, last_run_at_utc: datetime) -> float:
+        if config.update_frequency_minutes == 60 or not config.run_time_uk:
+            return float(config.update_frequency_minutes * 60)
+
+        target_utc = self._next_scheduled_utc(last_run_at_utc, config.update_frequency_minutes, config.run_time_uk)
+        now_utc = datetime.now(timezone.utc)
+        return max((target_utc - now_utc).total_seconds(), 0.0)
+
+    def _next_scheduled_utc(self, last_run_at_utc: datetime, frequency_minutes: int, run_time_uk: str) -> datetime:
+        if frequency_minutes % (24 * 60) != 0:
+            return last_run_at_utc + timedelta(minutes=frequency_minutes)
+
+        cadence_days = frequency_minutes // (24 * 60)
+        hours, minutes = [int(part) for part in run_time_uk.split(":", maxsplit=1)]
+        scheduled_time = time(hour=hours, minute=minutes, tzinfo=UK_TZ)
+        last_run_london = last_run_at_utc.astimezone(UK_TZ)
+        target_date = last_run_london.date() + timedelta(days=cadence_days)
+        target_london = datetime.combine(target_date, scheduled_time)
+        return target_london.astimezone(timezone.utc)
 
     async def _run_single_search(self, config: PropertyAgentConfig) -> tuple[list[PropertyFinding], str]:
         prompt = self._build_prompt(config)
