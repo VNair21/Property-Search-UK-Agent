@@ -121,6 +121,7 @@ export default function App() {
   const [isAgentRunning, setIsAgentRunning] = useState<boolean>(false);
   const [hideCachedFindings, setHideCachedFindings] = useState<boolean>(false);
   const [agentUpdateFrequency, setAgentUpdateFrequency] = useState<FrequencyOption | null>(null);
+  const [agentRunTimeUk, setAgentRunTimeUk] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [resultFindings, setResultFindings] = useState<AgentFinding[]>([]);
@@ -226,6 +227,7 @@ export default function App() {
         if (savedRunTimeUk !== null) {
           setRunTimeUk(savedRunTimeUk);
         }
+        setAgentRunTimeUk(savedRunTimeUk && savedRunTimeUk.trim().length > 0 ? savedRunTimeUk.trim() : null);
 
         await fetchAgentStatus({ syncFrequencySelection: true });
       } catch (error) {
@@ -297,11 +299,12 @@ export default function App() {
       setIsAgentRunning(true);
       setHideCachedFindings(false);
       setAgentUpdateFrequency(updateFrequency);
+      setAgentRunTimeUk(runTimeUkForRequest);
       setHasUnsavedFrequencySelection(false);
       setStatusMessage(
         updateFrequency === 'Hourly'
           ? `Agent running. Searching every ${frequencyMinutes} minutes and sending updates via the configured notification channel.`
-          : `Agent running. First search completed, then scheduled every ${updateFrequency.toLowerCase()} at ${trimmedRunTimeUk} UK time.`,
+          : `Agent running. First search completed; scheduled ${updateFrequency.toLowerCase()} at ${trimmedRunTimeUk} UK time.`,
       );
       setResultFindings(latestResultFindings);
     } catch (error) {
@@ -325,6 +328,7 @@ export default function App() {
       }
       setIsAgentRunning(false);
       setHideCachedFindings(true);
+      setAgentRunTimeUk(null);
       setResultFindings([]);
       setStatusMessage('Property agent cancelled. No further scheduled searches will run.');
     } catch (error) {
@@ -483,6 +487,13 @@ export default function App() {
         {isAgentRunning && agentUpdateFrequency ? (
           <Text style={styles.frequencyStatusText}>
             Running with {agentUpdateFrequency.toLowerCase()} updates.
+          </Text>
+        ) : null}
+        {isAgentRunning ? (
+          <Text style={styles.frequencyStatusText}>
+            {agentUpdateFrequency === 'Hourly'
+              ? 'Time (UK) is not used for hourly schedules.'
+              : `Scheduled Time (UK): ${agentRunTimeUk ?? 'Not set'}`}
           </Text>
         ) : null}
         {statusMessage ? <Text style={styles.statusMessage}>{statusMessage}</Text> : null}
