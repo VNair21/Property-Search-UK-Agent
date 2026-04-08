@@ -248,6 +248,8 @@ export default function App() {
     setIsSaving(true);
     setStatusMessage('');
     const frequencyMinutes = frequencyToMinutes[updateFrequency].toString();
+    const runTimeUkForRequest =
+      updateFrequency === 'Hourly' ? null : trimmedRunTimeUk || null;
     const valuesByKey: Record<string, string> = {
       [redisKeys.websites]: websites,
       [redisKeys.areas]: areas,
@@ -268,7 +270,7 @@ export default function App() {
           areas_to_search: areas,
           property_criteria: criteria,
           update_frequency_minutes: Number(frequencyMinutes),
-          run_time_uk: trimmedRunTimeUk || null,
+          run_time_uk: runTimeUkForRequest,
         }),
       });
 
