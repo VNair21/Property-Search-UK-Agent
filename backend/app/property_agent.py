@@ -224,7 +224,9 @@ class PropertySearchAgent:
                 last_run_at_utc = datetime.now(timezone.utc)
 
     def _validate_schedule_inputs(self, config: PropertyAgentConfig) -> None:
-        if config.update_frequency_minutes != 60 and not config.run_time_uk:
+        frequency_minutes = config.update_frequency_minutes
+        requires_run_time = frequency_minutes % (24 * 60) == 0
+        if requires_run_time and not config.run_time_uk:
             raise ValueError("Time (UK) is required for daily, weekly, and monthly schedules")
 
     def _seconds_until_next_run(self, config: PropertyAgentConfig, last_run_at_utc: datetime) -> float:
