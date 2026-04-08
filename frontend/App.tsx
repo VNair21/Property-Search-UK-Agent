@@ -29,6 +29,7 @@ type AgentFinding = {
 };
 
 const frequencyOptions: FrequencyOption[] = ['Hourly', 'Daily', 'Weekly', 'Monthly'];
+const isValidUkTime = (value: string): boolean => /^([01]\d|2[0-3]):([0-5]\d)$/.test(value.trim());
 
 const normalizeBaseUrl = (rawBaseUrl: string): string => rawBaseUrl.replace(/\/$/, '');
 
@@ -238,6 +239,12 @@ export default function App() {
   }, []);
 
   const onStartAgent = async () => {
+    const trimmedRunTimeUk = runTimeUk.trim();
+    if (updateFrequency !== 'Hourly' && !isValidUkTime(trimmedRunTimeUk)) {
+      setStatusMessage('Please enter a valid Time (UK) in 24-hour format (HH:MM).');
+      return;
+    }
+
     setIsSaving(true);
     setStatusMessage('');
     const frequencyMinutes = frequencyToMinutes[updateFrequency].toString();
@@ -247,7 +254,7 @@ export default function App() {
       [redisKeys.criteria]: criteria,
       [redisKeys.frequencyLabel]: updateFrequency,
       [redisKeys.frequencyMinutes]: frequencyMinutes,
-      [redisKeys.runTimeUk]: runTimeUk.trim(),
+      [redisKeys.runTimeUk]: trimmedRunTimeUk,
     };
     let agentStarted = false;
     let latestResultFindings: AgentFinding[] = [];
@@ -261,6 +268,7 @@ export default function App() {
           areas_to_search: areas,
           property_criteria: criteria,
           update_frequency_minutes: Number(frequencyMinutes),
+          run_time_uk: trimmedRunTimeUk || null,
         }),
       });
 
@@ -289,7 +297,9 @@ export default function App() {
       setAgentUpdateFrequency(updateFrequency);
       setHasUnsavedFrequencySelection(false);
       setStatusMessage(
-        `Agent running. Searching every ${frequencyMinutes} minutes and sending updates via the configured notification channel.`,
+        updateFrequency === 'Hourly'
+          ? `Agent running. Searching every ${frequencyMinutes} minutes and sending updates via the configured notification channel.`
+          : `Agent running. First search completed, then scheduled every ${updateFrequency.toLowerCase()} at ${trimmedRunTimeUk} UK time.`,
       );
       setResultFindings(latestResultFindings);
     } catch (error) {
@@ -428,7 +438,12 @@ export default function App() {
                   placeholderTextColor="#8f939b"
                   value={runTimeUk}
                   onChangeText={setRunTimeUk}
+                  keyboardType="numbers-and-punctuation"
+                  maxLength={5}
                 />
+                {runTimeUk.trim().length > 0 && !isValidUkTime(runTimeUk) ? (
+                  <Text style={styles.validationText}>Use 24-hour format HH:MM</Text>
+                ) : null}
               </View>
             </View>
           </View>
@@ -555,6 +570,11 @@ const styles = StyleSheet.create({
   },
   halfField: {
     flex: 1,
+  },
+  validationText: {
+    marginTop: 6,
+    fontSize: 12,
+    color: '#b34b4a',
   },
   label: {
     fontSize: 21 / 2,
