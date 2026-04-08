@@ -529,28 +529,29 @@ class PropertySearchAgent:
         if not findings:
             return "No results returned."
 
-        columns = [
-            ("#", 2, lambda item: str(item.rank)),
-            ("Property", 28, lambda item: item.property),
-            ("Price", 12, lambda item: item.price),
-            ("Size", 10, lambda item: item.size_sqm),
-            ("£/sqm", 10, lambda item: item.pounds_per_sqm),
-            ("Location", 18, lambda item: item.location),
-        ]
+        def clean(value: str) -> str:
+            return re.sub(r"\s+", " ", value.strip())
 
-        def fit(value: str, width: int) -> str:
-            single_line = re.sub(r"\s+", " ", value.strip())
-            if len(single_line) <= width:
-                return single_line.ljust(width)
-            return f"{single_line[: max(width - 1, 0)]}…"
+        blocks = []
+        for item in findings:
+            blocks.append(
+                "\n".join(
+                    [
+                        f"#{item.rank} — {clean(item.property)}",
+                        f"Price: {clean(item.price)}",
+                        f"Size: {clean(item.size_sqm)}",
+                        f"£/sqm: {clean(item.pounds_per_sqm)}",
+                        f"Service charge: {clean(item.service_charge)}",
+                        f"Ground rent: {clean(item.ground_rent)}",
+                        f"Location: {clean(item.location)}",
+                        f"Strengths: {clean(item.key_strengths)}",
+                        f"Issues: {clean(item.main_issues)}",
+                        f"URL: {clean(item.listing_url)}",
+                    ]
+                )
+            )
 
-        header = " | ".join([name.ljust(width) for name, width, _ in columns])
-        divider = "-+-".join(["-" * width for _, width, _ in columns])
-        rows = [
-            " | ".join([fit(extractor(item), width) for _, width, extractor in columns])
-            for item in findings
-        ]
-        return "\n".join([header, divider, *rows])
+        return "\n\n--------------------\n\n".join(blocks)
 
     def _escape_telegram_html(self, text: str) -> str:
         return (
