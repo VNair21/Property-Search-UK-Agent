@@ -62,8 +62,14 @@ export default function Home() {
   const isValidRunTime = /^([01]\d|2[0-3]):([0-5]\d)$/.test(form.run_time_uk.trim());
   const isRunning = agentStatus?.is_running ?? false;
 
-  const loadStatus = useCallback(async (syncForm = false) => {
-    setIsLoadingStatus(true);
+  const loadStatus = useCallback(async (options?: { syncForm?: boolean; showLoading?: boolean }) => {
+    const syncForm = options?.syncForm ?? false;
+    const showLoading = options?.showLoading ?? true;
+
+    if (showLoading) {
+      setIsLoadingStatus(true);
+    }
+
     try {
       const response = await fetch("/api/property-agent/status", { cache: "no-store" });
       const payload = (await response.json()) as unknown;
@@ -83,15 +89,27 @@ export default function Home() {
         });
       }
     } catch (error) {
-      setMessage((error as Error).message);
+      if (showLoading) {
+        setMessage((error as Error).message);
+      }
     } finally {
-      setIsLoadingStatus(false);
+      if (showLoading) {
+        setIsLoadingStatus(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    void loadStatus(true);
+    void loadStatus({ syncForm: true });
   }, [loadStatus]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      void loadStatus({ showLoading: false });
+    }, isRunning ? 5000 : 15000);
+
+    return () => window.clearInterval(intervalId);
+  }, [isRunning, loadStatus]);
 
   const statusTone = useMemo(() => {
     if (isLoadingStatus) {
@@ -130,8 +148,8 @@ export default function Home() {
         throw new Error(payload.detail ?? "Failed to start property agent.");
       }
 
-      setMessage("Search saved and first run completed.");
-      await loadStatus(false);
+      setMessage("Agent started. First search is running in the background.");
+      await loadStatus({ showLoading: false });
     } catch (error) {
       setMessage((error as Error).message);
     } finally {
@@ -151,7 +169,7 @@ export default function Home() {
       }
 
       setMessage("Property agent stopped.");
-      await loadStatus(false);
+      await loadStatus({ showLoading: false });
     } catch (error) {
       setMessage((error as Error).message);
     } finally {
@@ -248,13 +266,13 @@ export default function Home() {
           <div className="actions">
             <button className="primary-button" type="submit" disabled={isSaving}>
               <Search size={17} aria-hidden="true" />
-              {isSaving ? "Running" : "Set Search"}
+              {isSaving ? "Starting..." : "Set Search"}
             </button>
             <button className="secondary-button" type="button" onClick={handleCancel} disabled={isCancelling}>
               <CircleStop size={17} aria-hidden="true" />
               {isCancelling ? "Stopping" : "Cancel"}
             </button>
-            <button className="icon-button" type="button" onClick={() => void loadStatus(false)} aria-label="Refresh status">
+            <button className="icon-button" type="button" onClick={() => void loadStatus()} aria-label="Refresh status">
               <RefreshCw size={17} aria-hidden="true" />
             </button>
           </div>
@@ -274,7 +292,7 @@ export default function Home() {
             </div>
             <div>
               <dt>Next Run</dt>
-              <dd>{formatDateTime(agentStatus?.next_run_at)}</dd>
+              <dd>{formatNextRun(agentStatus?.next_run_at, isRunning)}</dd>
             </div>
             <div>
               <dt>Last Results</dt>
@@ -287,6 +305,8 @@ export default function Home() {
           </dl>
           {agentStatus?.last_error ? (
             <p className="error-text">{agentStatus.last_error}</p>
+          ) : isRunning && !agentStatus?.last_results_at ? (
+            <p className="quiet-text">First search is running now.</p>
           ) : (
             <p className="quiet-text">Ready for the next run.</p>
           )}
@@ -367,6 +387,23 @@ function formatDateTime(value: string | null | undefined): string {
     timeStyle: "short",
     timeZone: "Europe/London",
   }).format(date);
+}
+
+function formatNextRun(value: string | null | undefined, isRunning: boolean): string {
+  if (!value) {
+    return "Not set";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Not set";
+  }
+
+  if (isRunning && date.getTime() <= Date.now()) {
+    return "Running now";
+  }
+
+  return formatDateTime(value);
 }
 
 function errorDetail(value: unknown): string | null {

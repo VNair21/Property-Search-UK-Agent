@@ -33,31 +33,23 @@ type ScheduledRunResult =
 
 export async function configureAndStartAgent(requestBody: unknown): Promise<PropertyAgentSetResponse> {
   const config = configFromRequest(requestBody);
-  validateNotificationSettings();
-
-  const run = await runPropertySearch(config);
-  const notification = await sendResults(run.findings, config);
+  const notification = validateNotificationSettings();
   const now = new Date();
   const state: StoredAgentState = {
     status: "running",
-    last_run_at: now.toISOString(),
-    next_run_at: computeNextRunAt(config, now).toISOString(),
+    last_run_at: null,
+    next_run_at: now.toISOString(),
     last_error: null,
     last_error_at: null,
     updated_at: now.toISOString(),
     notification_channel: notification.channel,
     recipient: notification.recipient,
   };
-  const results: StoredSearchResults = {
-    timestamp: now.toISOString(),
-    findings: run.findings,
-    table_markdown: run.tableMarkdown,
-  };
 
   const redis = createRedisClient();
   await redis.pipeline([
     ["SET", AGENT_CONFIG_KEY, JSON.stringify(config)],
-    ["SET", AGENT_RESULTS_KEY, JSON.stringify(results)],
+    ["DEL", AGENT_RESULTS_KEY],
     ["SET", AGENT_STATE_KEY, JSON.stringify(state)],
   ]);
 
@@ -69,8 +61,8 @@ export async function configureAndStartAgent(requestBody: unknown): Promise<Prop
     next_run_at: state.next_run_at,
     notification_channel: notification.channel,
     recipient: notification.recipient,
-    findings: run.findings,
-    table_markdown: run.tableMarkdown,
+    findings: [],
+    table_markdown: "",
   };
 }
 

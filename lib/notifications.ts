@@ -10,8 +10,9 @@ export async function sendResults(
   return { channel: "telegram", recipient };
 }
 
-export function validateNotificationSettings(): void {
-  getTelegramConfig();
+export function validateNotificationSettings(): { channel: NotificationChannel; recipient: string } {
+  const telegram = getTelegramConfig();
+  return { channel: "telegram", recipient: telegram.chatId };
 }
 
 async function sendTelegram(findings: PropertyFinding[], config: PropertyAgentConfig): Promise<string> {
