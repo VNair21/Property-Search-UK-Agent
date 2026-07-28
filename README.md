@@ -1,114 +1,121 @@
-# Full-stack starter: React Native (Web + iOS) + FastAPI + Redis
+# Agentic Wealth Manager
 
-This repository is now scaffolded as a full-stack starter with:
+A Vercel-ready property search agent built with Next.js, Vercel Functions, Vercel Cron Jobs, and Upstash Redis.
 
-- **Frontend:** React Native using **Expo** (runs on Web and iOS)
-- **Backend:** **Python + FastAPI**
-- **Primary database:** **Redis**
+The app lets you configure a property search, run it immediately with OpenAI web search, store the latest top-10 results, and send updates by Telegram or email.
 
-## Project structure
+## Architecture
 
-- `frontend/` – Expo React Native app (Web + iOS)
-- `backend/` – FastAPI app with Redis-backed endpoints
-- `docker-compose.yml` – Redis + backend service orchestration
+- `app/page.tsx` - the web dashboard.
+- `app/api/property-agent/set-search/route.ts` - validates and saves a search, runs it immediately, and sends the first notification.
+- `app/api/property-agent/status/route.ts` - reads persisted agent state and latest results.
+- `app/api/property-agent/cancel/route.ts` - marks the agent as stopped.
+- `app/api/cron/property-agent/route.ts` - Vercel Cron entry point that runs the agent when the persisted `next_run_at` is due.
+- `lib/` - Redis REST client, OpenAI search runner, scheduling, notifications, and shared types.
 
-## 1) Backend setup (FastAPI + Redis)
+## Why this rewrite works on Vercel
 
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-uvicorn app.main:app --reload --port 8000
-```
+The previous FastAPI service used an in-memory background loop. That does not map well to serverless hosting, where function instances are short lived.
 
-Backend health check:
+This version persists the agent config, run state, latest results, and next scheduled run in Redis. Vercel Cron invokes a regular route handler, and the route decides whether a run is due.
 
-- <http://localhost:8000/health>
-- <http://localhost:8000/docs>
-
-## 2) Frontend setup (Expo React Native)
+## Local setup
 
 ```bash
-cd frontend
 npm install
-npm run web
+cp .env.example .env.local
+npm run dev
 ```
 
-To run on iOS (on macOS with Xcode):
+Open <http://localhost:3000>.
+
+Useful checks:
 
 ```bash
-npm run ios
+npm run typecheck
+npm run build
 ```
 
-By default, the app targets port `8000` on the same host running Metro/Expo (`http://<dev-host>:8000`) so it works for `npm run web` and `npm run ios` development flows.
-If your backend runs elsewhere, set `EXPO_PUBLIC_API_BASE_URL` in `frontend/.env` (for example `http://localhost:8000` or your machine's LAN IP).
+## Required environment variables
 
-## 3) Redis + backend with Docker Compose
-
-From repository root:
+Set these in `.env.local` for local development and in your Vercel project settings for production.
 
 ```bash
-docker compose up --build
+OPENAI_API_KEY=
+DEFAULT_OPENAI_MODEL=gpt-5
+
+KV_REST_API_URL=
+KV_REST_API_TOKEN=
+# or:
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
 ```
 
-This starts:
+For Telegram notifications:
 
-- Redis at `localhost:6379`
-- FastAPI backend at `localhost:8000`
+```bash
+NOTIFICATION_CHANNEL=telegram
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+TELEGRAM_API_BASE_URL=https://api.telegram.org
+```
 
-Development extras included in Compose:
+For email notifications:
 
-- Backend code is bind-mounted (`./backend:/app`) and runs `uvicorn --reload` for hot reload.
-- Redis data is persisted in the named volume `redis_data` (AOF enabled).
+```bash
+NOTIFICATION_CHANNEL=email
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USE_TLS=true
+SMTP_AUTH_METHOD=basic
+SMTP_USERNAME=
+SMTP_PASSWORD=
+SMTP_FROM_EMAIL=
+SMTP_RESULT_RECIPIENT=
+```
 
-## API endpoints included
+XOAUTH2 is also supported:
 
-- `GET /health` – basic service and Redis connectivity status
-- `POST /kv/{key}` with JSON body `{ "value": "..." }` – store a value in Redis
-- `GET /kv/{key}` – fetch a value from Redis
-- `POST /property-agent/set-search` – starts OpenAI-powered property search agent from UI fields
-- `POST /property-agent/cancel` – stops running property search agent
-- `GET /property-agent/status` – returns running state and latest top-10 findings
+```bash
+SMTP_AUTH_METHOD=xoauth2
+SMTP_OAUTH2_USER=
+SMTP_OAUTH2_ACCESS_TOKEN=
+```
 
+## Vercel deployment
 
-### Keep secrets out of git (recommended local workflow)
+1. Push this repository to GitHub.
+2. Import the repository in Vercel.
+3. Add a Redis integration from Vercel Marketplace, such as Upstash Redis.
+4. Add the environment variables above.
+5. Set `CRON_SECRET` to a random value with at least 16 characters.
+6. Deploy.
 
-- `backend/.env.example` and `frontend/.env.example` are committed as templates only.
-- Create real local files that stay untracked:
-  - `cp backend/.env.example backend/.env`
-  - `cp frontend/.env.example frontend/.env`
-- Put sensitive values (for example `OPENAI_API_KEY`, `SMTP_PASSWORD`) only in your local `.env` files.
-- Do **not** put secrets in `backend/app/config.py`; that file only defines typed fields and defaults, and reads secret values from env files/runtime environment.
-- The repo `.gitignore` is configured to ignore `.env` / `.env.*` files while still allowing `.env.example` templates to be committed.
+The default `vercel.json` cron runs once per day at `08:00` UTC:
 
-## Property agent environment variables
+```json
+{
+  "crons": [
+    {
+      "path": "/api/cron/property-agent",
+      "schedule": "0 8 * * *"
+    }
+  ]
+}
+```
 
-Set these in `backend/.env` for the agentic layer (copy from `backend/.env.example` first).  
-If you want machine-specific overrides, create `backend/.env.local`; the backend now loads `.env` first and then `.env.local` (so `.env.local` wins for conflicts).
+This default is compatible with Vercel Hobby plans. To support automatic hourly checks, use a Pro plan or an external cron provider, then change the schedule to `0 * * * *` or call `/api/cron/property-agent` at the cadence you need.
 
-- `OPENAI_API_KEY` – required for OpenAI-based search
-- `DEFAULT_OPENAI_MODEL` – optional, defaults to `gpt-5`
-- `NOTIFICATION_CHANNEL` – `telegram` (default) or `email`
-- `TELEGRAM_BOT_TOKEN` – required when `NOTIFICATION_CHANNEL=telegram`
-- `TELEGRAM_CHAT_ID` – required when `NOTIFICATION_CHANNEL=telegram`
-- `TELEGRAM_API_BASE_URL` – optional, defaults to `https://api.telegram.org`
-- `SMTP_HOST` – SMTP server host (required only when `NOTIFICATION_CHANNEL=email`)
-- `SMTP_PORT` – SMTP port (default `587`)
-- `SMTP_USE_TLS` – `true`/`false`, default `true`
-- `SMTP_AUTH_METHOD` – `basic` (default), `xoauth2`, or `none`
-- `SMTP_USERNAME` – username for SMTP auth (used by `basic`; optional fallback identity for `xoauth2`)
-- `SMTP_PASSWORD` – password/app-password for `basic` auth
-- `SMTP_OAUTH2_USER` – email/username used for `xoauth2` SMTP auth
-- `SMTP_OAUTH2_ACCESS_TOKEN` – OAuth2 bearer token used for `xoauth2` SMTP auth
-- `SMTP_FROM_EMAIL` – required sender email address when `NOTIFICATION_CHANNEL=email`
-- `SMTP_RESULT_RECIPIENT` – required recipient email address when `NOTIFICATION_CHANNEL=email`
+## API
 
-If you use Hotmail/Outlook and basic SMTP auth is blocked, set `SMTP_AUTH_METHOD=xoauth2` and provide `SMTP_OAUTH2_USER` + `SMTP_OAUTH2_ACCESS_TOKEN`.
+- `GET /api/health`
+- `POST /api/property-agent/set-search`
+- `GET /api/property-agent/status`
+- `POST /api/property-agent/cancel`
+- `GET /api/cron/property-agent`
 
-## Notes
+The legacy Redis key/value routes are still available for simple compatibility:
 
-- Redis is being used as the **primary datastore** in this starter.
-- The backend uses async Redis client via `redis[hiredis]`.
-- The frontend includes a simple screen to exercise backend health and key/value read-write.
+- `POST /api/kv/{key}` with `{ "value": "..." }`
+- `GET /api/kv/{key}`
+- `POST /api/kv/bulk` with `{ "values": { "key": "value" } }`

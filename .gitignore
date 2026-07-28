@@ -11,10 +11,14 @@ venv/
 
 # Node
 node_modules/
+.next/
+.vercel/
+*.tsbuildinfo
 .expo/
 .expo-shared/
 dist/
 web-build/
+out/
 
 # OS/Editor
 .DS_Store
