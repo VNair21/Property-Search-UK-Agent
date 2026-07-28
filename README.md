@@ -86,10 +86,12 @@ SMTP_OAUTH2_ACCESS_TOKEN=
 
 1. Push this repository to GitHub.
 2. Import the repository in Vercel.
-3. Add a Redis integration from Vercel Marketplace, such as Upstash Redis.
-4. Add the environment variables above.
-5. Set `CRON_SECRET` to a random value with at least 16 characters.
-6. Deploy.
+3. Confirm the project uses the Next.js framework preset and the repository root as the Root Directory.
+4. Leave Output Directory unset/auto-detected. The committed `vercel.json` also sets `outputDirectory` to `null` so Vercel uses the Next.js output instead of looking for `public/`.
+5. Add a Redis integration from Vercel Marketplace, such as Upstash Redis.
+6. Add the environment variables above.
+7. Set `CRON_SECRET` to a random value with at least 16 characters.
+8. Deploy.
 
 The default `vercel.json` cron runs once per day at `08:00` UTC:
 
