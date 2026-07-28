@@ -186,7 +186,7 @@ export default function Home() {
       <section className="topbar" aria-label="Agent overview">
         <div>
           <p className="eyebrow">Vercel property monitor</p>
-          <h1>Agentic Wealth Manager</h1>
+          <h1>UK Property Search Agent</h1>
         </div>
         <div className={`status-chip ${statusTone}`}>
           <span aria-hidden="true" />

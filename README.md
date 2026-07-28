@@ -1,4 +1,4 @@
-# Agentic Wealth Manager
+# UK Property Search Agent
 
 A Vercel-ready property search agent built with Next.js, Vercel Functions, Vercel Cron Jobs, and cloud Redis.
 
