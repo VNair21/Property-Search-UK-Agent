@@ -36,7 +36,7 @@ export async function configureAndStartAgent(requestBody: unknown): Promise<Prop
   validateNotificationSettings();
 
   const run = await runPropertySearch(config);
-  const notification = await sendResults(run.findings, run.tableMarkdown, config);
+  const notification = await sendResults(run.findings, config);
   const now = new Date();
   const state: StoredAgentState = {
     status: "running",
@@ -159,7 +159,7 @@ export async function runScheduledAgent(): Promise<ScheduledRunResult> {
 
     validateNotificationSettings();
     const run = await runPropertySearch(config);
-    const notification = await sendResults(run.findings, run.tableMarkdown, config);
+    const notification = await sendResults(run.findings, config);
     const now = new Date();
     const nextRunAt = computeNextRunAt(config, now).toISOString();
     const nextState: StoredAgentState = {

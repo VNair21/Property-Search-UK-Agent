@@ -1,7 +1,7 @@
 export const FREQUENCY_OPTIONS = ["Hourly", "Daily", "Weekly", "Monthly"] as const;
 
 export type FrequencyOption = (typeof FREQUENCY_OPTIONS)[number];
-export type NotificationChannel = "telegram" | "email";
+export type NotificationChannel = "telegram";
 export type AgentLifecycleStatus = "running" | "stopped";
 
 export const frequencyToMinutes: Record<FrequencyOption, number> = {

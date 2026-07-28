@@ -2,7 +2,7 @@
 
 A Vercel-ready property search agent built with Next.js, Vercel Functions, Vercel Cron Jobs, and cloud Redis.
 
-The app lets you configure a property search, run it immediately with OpenAI web search, store the latest top-10 results, and send updates by Telegram or email.
+The app lets you configure a property search, run it immediately with OpenAI web search, store the latest top-10 results, and send updates by Telegram.
 
 ## Architecture
 
@@ -58,32 +58,9 @@ For Redis Cloud, open your database's **Redis SDK clients** connection option, c
 For Telegram notifications:
 
 ```bash
-NOTIFICATION_CHANNEL=telegram
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 TELEGRAM_API_BASE_URL=https://api.telegram.org
-```
-
-For email notifications:
-
-```bash
-NOTIFICATION_CHANNEL=email
-SMTP_HOST=
-SMTP_PORT=587
-SMTP_USE_TLS=true
-SMTP_AUTH_METHOD=basic
-SMTP_USERNAME=
-SMTP_PASSWORD=
-SMTP_FROM_EMAIL=
-SMTP_RESULT_RECIPIENT=
-```
-
-XOAUTH2 is also supported:
-
-```bash
-SMTP_AUTH_METHOD=xoauth2
-SMTP_OAUTH2_USER=
-SMTP_OAUTH2_ACCESS_TOKEN=
 ```
 
 ## Vercel deployment

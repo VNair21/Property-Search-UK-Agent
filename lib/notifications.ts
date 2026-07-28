@@ -1,33 +1,16 @@
-import nodemailer from "nodemailer";
-
-import { getNotificationChannel, getSmtpConfig, getTelegramConfig } from "./config";
+import { getTelegramConfig } from "./config";
 import { splitForTelegram, toTelegramMessage, wrapTelegramChunk } from "./format";
 import type { NotificationChannel, PropertyAgentConfig, PropertyFinding } from "./types";
 
 export async function sendResults(
   findings: PropertyFinding[],
-  tableMarkdown: string,
   config: PropertyAgentConfig,
 ): Promise<{ channel: NotificationChannel; recipient: string }> {
-  const channel = getNotificationChannel();
-
-  if (channel === "email") {
-    const recipient = await sendEmail(findings, tableMarkdown, config);
-    return { channel, recipient };
-  }
-
   const recipient = await sendTelegram(findings, config);
-  return { channel, recipient };
+  return { channel: "telegram", recipient };
 }
 
 export function validateNotificationSettings(): void {
-  const channel = getNotificationChannel();
-
-  if (channel === "email") {
-    getSmtpConfig();
-    return;
-  }
-
   getTelegramConfig();
 }
 
@@ -57,60 +40,4 @@ async function sendTelegram(findings: PropertyFinding[], config: PropertyAgentCo
   }
 
   return telegram.chatId;
-}
-
-async function sendEmail(
-  findings: PropertyFinding[],
-  tableMarkdown: string,
-  config: PropertyAgentConfig,
-): Promise<string> {
-  const smtp = getSmtpConfig();
-  const transporter = nodemailer.createTransport({
-    host: smtp.host,
-    port: smtp.port,
-    secure: smtp.useTls && smtp.port === 465,
-    requireTLS: smtp.useTls && smtp.port !== 465,
-    auth: authForSmtp(smtp),
-  });
-
-  await transporter.sendMail({
-    from: smtp.fromEmail,
-    to: smtp.resultRecipient,
-    subject: "Property Search Agent Results",
-    text: [
-      "Property Search Agent Results",
-      `Model: ${config.model}`,
-      `Websites: ${config.websites_to_search.join(", ")}`,
-      `Areas: ${config.areas_to_search.join(", ")}`,
-      `Criteria: ${config.property_criteria}`,
-      `Results: ${findings.length}`,
-      "",
-      tableMarkdown,
-    ].join("\n"),
-  });
-
-  return smtp.resultRecipient;
-}
-
-function authForSmtp(smtp: ReturnType<typeof getSmtpConfig>) {
-  if (smtp.authMethod === "none") {
-    return undefined;
-  }
-
-  if (smtp.authMethod === "xoauth2") {
-    return {
-      type: "OAuth2" as const,
-      user: smtp.oauth2User,
-      accessToken: smtp.oauth2AccessToken,
-    };
-  }
-
-  if (!smtp.username) {
-    return undefined;
-  }
-
-  return {
-    user: smtp.username,
-    pass: smtp.password,
-  };
 }
