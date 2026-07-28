@@ -1,6 +1,6 @@
 # Agentic Wealth Manager
 
-A Vercel-ready property search agent built with Next.js, Vercel Functions, Vercel Cron Jobs, and Upstash Redis.
+A Vercel-ready property search agent built with Next.js, Vercel Functions, Vercel Cron Jobs, and cloud Redis.
 
 The app lets you configure a property search, run it immediately with OpenAI web search, store the latest top-10 results, and send updates by Telegram or email.
 
@@ -11,7 +11,7 @@ The app lets you configure a property search, run it immediately with OpenAI web
 - `app/api/property-agent/status/route.ts` - reads persisted agent state and latest results.
 - `app/api/property-agent/cancel/route.ts` - marks the agent as stopped.
 - `app/api/cron/property-agent/route.ts` - Vercel Cron entry point that runs the agent when the persisted `next_run_at` is due.
-- `lib/` - Redis REST client, OpenAI search runner, scheduling, notifications, and shared types.
+- `lib/` - Redis client adapters, OpenAI search runner, scheduling, notifications, and shared types.
 
 ## Why this rewrite works on Vercel
 
@@ -44,12 +44,16 @@ Set these in `.env.local` for local development and in your Vercel project setti
 OPENAI_API_KEY=
 DEFAULT_OPENAI_MODEL=gpt-5
 
+REDIS_URL=
+
+# Or use Upstash-compatible Redis REST credentials:
 KV_REST_API_URL=
 KV_REST_API_TOKEN=
-# or:
 UPSTASH_REDIS_REST_URL=
 UPSTASH_REDIS_REST_TOKEN=
 ```
+
+For Redis Cloud, open your database's **Redis SDK clients** connection option, choose Node.js, and use the connection string as `REDIS_URL`. It usually looks like `redis://default:<password>@<host>:<port>` or `rediss://default:<password>@<host>:<port>` when TLS is enabled.
 
 For Telegram notifications:
 
@@ -88,7 +92,7 @@ SMTP_OAUTH2_ACCESS_TOKEN=
 2. Import the repository in Vercel.
 3. Confirm the project uses the Next.js framework preset and the repository root as the Root Directory.
 4. Leave Output Directory unset/auto-detected. The committed `vercel.json` also sets `outputDirectory` to `null` so Vercel uses the Next.js output instead of looking for `public/`.
-5. Add a Redis integration from Vercel Marketplace, such as Upstash Redis.
+5. Add `REDIS_URL` from Redis Cloud, or add a Redis integration from Vercel Marketplace.
 6. Add the environment variables above.
 7. Set `CRON_SECRET` to a random value with at least 16 characters.
 8. Deploy.

@@ -1,19 +1,39 @@
 import { ConfigError } from "./errors";
 import type { NotificationChannel } from "./types";
 
-function cleanEnv(value: string | undefined): string {
+export function cleanEnv(value: string | undefined): string {
   return value?.trim() ?? "";
 }
 
-export function getRedisConfig(): { url: string; token: string } {
+export type RedisConnectionConfig =
+  | {
+      provider: "redis-url";
+      url: string;
+    }
+  | {
+      provider: "rest";
+      url: string;
+      token: string;
+    };
+
+export function getRedisConnectionConfig(): RedisConnectionConfig {
+  const redisUrl = cleanEnv(process.env.REDIS_URL) || cleanEnv(process.env.REDISCLOUD_URL);
+  if (redisUrl) {
+    return {
+      provider: "redis-url",
+      url: redisUrl,
+    };
+  }
+
   const url = cleanEnv(process.env.UPSTASH_REDIS_REST_URL) || cleanEnv(process.env.KV_REST_API_URL);
   const token = cleanEnv(process.env.UPSTASH_REDIS_REST_TOKEN) || cleanEnv(process.env.KV_REST_API_TOKEN);
 
   if (!url || !token) {
-    throw new ConfigError("Redis REST credentials are missing. Set KV_REST_API_URL and KV_REST_API_TOKEN, or the UPSTASH_REDIS_REST_* equivalents.");
+    throw new ConfigError("Redis credentials are missing. For Redis Cloud, set REDIS_URL. For Upstash REST, set KV_REST_API_URL and KV_REST_API_TOKEN, or the UPSTASH_REDIS_REST_* equivalents.");
   }
 
   return {
+    provider: "rest",
     url: url.replace(/\/$/, ""),
     token,
   };
