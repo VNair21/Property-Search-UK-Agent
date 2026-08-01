@@ -1,4 +1,5 @@
 import { ConfigError } from "./errors";
+import type { TelegramNotificationConfig } from "./types";
 
 export function cleanEnv(value: string | undefined): string {
   return value?.trim() ?? "";
@@ -51,21 +52,28 @@ export function getOpenAIConfig(): { apiKey: string; defaultModel: string } {
   };
 }
 
-export function getTelegramConfig(): {
-  botToken: string;
-  chatId: string;
-  apiBaseUrl: string;
-} {
+export function getTelegramConfig(): TelegramNotificationConfig {
+  const config = getOptionalTelegramConfig();
+
+  if (!config) {
+    throw new ConfigError("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be configured for Telegram notifications.");
+  }
+
+  return config;
+}
+
+export function getOptionalTelegramConfig(): TelegramNotificationConfig | null {
   const botToken = cleanEnv(process.env.TELEGRAM_BOT_TOKEN);
   const chatId = cleanEnv(process.env.TELEGRAM_CHAT_ID);
 
   if (!botToken || !chatId) {
-    throw new ConfigError("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be configured for Telegram notifications.");
+    return null;
   }
 
   return {
+    channel: "telegram",
     botToken,
     chatId,
-    apiBaseUrl: cleanEnv(process.env.TELEGRAM_API_BASE_URL) || "https://api.telegram.org",
+    apiBaseUrl: (cleanEnv(process.env.TELEGRAM_API_BASE_URL) || "https://api.telegram.org").replace(/\/$/, ""),
   };
 }

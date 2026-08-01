@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 
-import { getAgentStatus } from "@/lib/agent-service";
 import { getAuthenticatedUser } from "@/lib/auth";
 import { jsonError } from "@/lib/http";
 
@@ -9,8 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request): Promise<NextResponse> {
   try {
-    const user = await getAuthenticatedUser(request);
-    return NextResponse.json(await getAgentStatus(user.id));
+    return NextResponse.json({ user: await getAuthenticatedUser(request) });
   } catch (error) {
     return jsonError(error);
   }

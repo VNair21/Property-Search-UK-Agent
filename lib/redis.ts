@@ -10,10 +10,14 @@ export type RedisDataClient = {
   ping(): Promise<string>;
   getString(key: string): Promise<string | null>;
   setString(key: string, value: string): Promise<void>;
+  setStringWithExpiry(key: string, value: string, ttlSeconds: number): Promise<void>;
   setJson(key: string, value: unknown): Promise<void>;
   getJson<T>(key: string): Promise<T | null>;
   delete(key: string): Promise<number>;
-  setIfAbsent(key: string, value: string, ttlSeconds: number): Promise<boolean>;
+  setIfAbsent(key: string, value: string, ttlSeconds?: number): Promise<boolean>;
+  addToSet(key: string, ...members: string[]): Promise<number>;
+  removeFromSet(key: string, ...members: string[]): Promise<number>;
+  getSetMembers(key: string): Promise<string[]>;
   pipeline(commands: RedisCommand[]): Promise<unknown[]>;
 };
 
@@ -44,6 +48,10 @@ export class RedisUrlClient implements RedisDataClient {
     await this.command<string>(["SET", key, value]);
   }
 
+  async setStringWithExpiry(key: string, value: string, ttlSeconds: number): Promise<void> {
+    await this.command<string>(["SET", key, value, "EX", ttlSeconds]);
+  }
+
   async setJson(key: string, value: unknown): Promise<void> {
     await this.setString(key, JSON.stringify(value));
   }
@@ -61,9 +69,32 @@ export class RedisUrlClient implements RedisDataClient {
     return this.command<number>(["DEL", key]);
   }
 
-  async setIfAbsent(key: string, value: string, ttlSeconds: number): Promise<boolean> {
-    const result = await this.command<string | null>(["SET", key, value, "EX", ttlSeconds, "NX"]);
+  async setIfAbsent(key: string, value: string, ttlSeconds?: number): Promise<boolean> {
+    const command: RedisCommand = ttlSeconds
+      ? ["SET", key, value, "EX", ttlSeconds, "NX"]
+      : ["SET", key, value, "NX"];
+    const result = await this.command<string | null>(command);
     return result === "OK";
+  }
+
+  async addToSet(key: string, ...members: string[]): Promise<number> {
+    if (members.length === 0) {
+      return 0;
+    }
+
+    return this.command<number>(["SADD", key, ...members]);
+  }
+
+  async removeFromSet(key: string, ...members: string[]): Promise<number> {
+    if (members.length === 0) {
+      return 0;
+    }
+
+    return this.command<number>(["SREM", key, ...members]);
+  }
+
+  async getSetMembers(key: string): Promise<string[]> {
+    return this.command<string[]>(["SMEMBERS", key]);
   }
 
   async pipeline(commands: RedisCommand[]): Promise<unknown[]> {
@@ -112,6 +143,10 @@ export class RedisRestClient implements RedisDataClient {
     await this.command<string>(["SET", key, value]);
   }
 
+  async setStringWithExpiry(key: string, value: string, ttlSeconds: number): Promise<void> {
+    await this.command<string>(["SET", key, value, "EX", ttlSeconds]);
+  }
+
   async setJson(key: string, value: unknown): Promise<void> {
     await this.setString(key, JSON.stringify(value));
   }
@@ -129,9 +164,32 @@ export class RedisRestClient implements RedisDataClient {
     return this.command<number>(["DEL", key]);
   }
 
-  async setIfAbsent(key: string, value: string, ttlSeconds: number): Promise<boolean> {
-    const result = await this.command<string | null>(["SET", key, value, "EX", ttlSeconds, "NX"]);
+  async setIfAbsent(key: string, value: string, ttlSeconds?: number): Promise<boolean> {
+    const command: RedisCommand = ttlSeconds
+      ? ["SET", key, value, "EX", ttlSeconds, "NX"]
+      : ["SET", key, value, "NX"];
+    const result = await this.command<string | null>(command);
     return result === "OK";
+  }
+
+  async addToSet(key: string, ...members: string[]): Promise<number> {
+    if (members.length === 0) {
+      return 0;
+    }
+
+    return this.command<number>(["SADD", key, ...members]);
+  }
+
+  async removeFromSet(key: string, ...members: string[]): Promise<number> {
+    if (members.length === 0) {
+      return 0;
+    }
+
+    return this.command<number>(["SREM", key, ...members]);
+  }
+
+  async getSetMembers(key: string): Promise<string[]> {
+    return this.command<string[]>(["SMEMBERS", key]);
   }
 
   async pipeline(commands: RedisCommand[]): Promise<unknown[]> {

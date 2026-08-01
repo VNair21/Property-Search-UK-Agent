@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { runScheduledAgent } from "@/lib/agent-service";
+import { runScheduledAgents } from "@/lib/agent-service";
 import { jsonError } from "@/lib/http";
 
 export const runtime = "nodejs";
@@ -14,7 +14,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   try {
-    return NextResponse.json(await runScheduledAgent());
+    return NextResponse.json(await runScheduledAgents());
   } catch (error) {
     return jsonError(error);
   }

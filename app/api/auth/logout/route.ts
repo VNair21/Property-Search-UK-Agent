@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { cancelAgent } from "@/lib/agent-service";
-import { getAuthenticatedUser } from "@/lib/auth";
+import { logoutAuthenticatedUser } from "@/lib/auth";
 import { jsonError } from "@/lib/http";
 
 export const runtime = "nodejs";
@@ -9,8 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request): Promise<NextResponse> {
   try {
-    const user = await getAuthenticatedUser(request);
-    return NextResponse.json(await cancelAgent(user.id));
+    return NextResponse.json(await logoutAuthenticatedUser(request));
   } catch (error) {
     return jsonError(error);
   }

@@ -2,16 +2,17 @@
 
 A Vercel-ready property search agent built with Next.js, Vercel Functions, Vercel Cron Jobs, and cloud Redis.
 
-The app lets you configure a property search, run it immediately with OpenAI web search, store the latest top-10 results, and send updates by Telegram.
+The app lets each user log in, configure a property search, run it immediately with OpenAI web search, store their latest top-10 results, and send updates to their own Telegram chat.
 
 ## Architecture
 
 - `app/page.tsx` - the web dashboard.
-- `app/api/property-agent/set-search/route.ts` - validates and saves a search, runs it immediately, and sends the first notification.
-- `app/api/property-agent/status/route.ts` - reads persisted agent state and latest results.
-- `app/api/property-agent/cancel/route.ts` - marks the agent as stopped.
-- `app/api/cron/property-agent/route.ts` - Vercel Cron entry point that runs the agent when the persisted `next_run_at` is due.
-- `lib/` - Redis client adapters, OpenAI search runner, scheduling, notifications, and shared types.
+- `app/api/auth/login/route.ts` - creates accounts and logs users in with Redis-backed sessions.
+- `app/api/property-agent/set-search/route.ts` - validates and saves a user-scoped search, runs it immediately, and sends the first notification.
+- `app/api/property-agent/status/route.ts` - reads the signed-in user's persisted agent state and latest results.
+- `app/api/property-agent/cancel/route.ts` - marks the signed-in user's agent as stopped.
+- `app/api/cron/property-agent/route.ts` - Vercel Cron entry point that checks all running user agents and runs the ones that are due.
+- `lib/` - Auth/session helpers, Redis client adapters, OpenAI search runner, scheduling, notifications, and shared types.
 
 ## Why this rewrite works on Vercel
 
@@ -55,7 +56,7 @@ UPSTASH_REDIS_REST_TOKEN=
 
 For Redis Cloud, open your database's **Redis SDK clients** connection option, choose Node.js, and use the connection string as `REDIS_URL`. It usually looks like `redis://default:<password>@<host>:<port>` or `rediss://default:<password>@<host>:<port>` when TLS is enabled.
 
-For Telegram notifications:
+Telegram credentials are entered in the dashboard for each user. These environment variables are optional fallbacks for older saved configs:
 
 ```bash
 TELEGRAM_BOT_TOKEN=
@@ -92,10 +93,15 @@ This default is compatible with Vercel Hobby plans. To support automatic hourly 
 ## API
 
 - `GET /api/health`
+- `POST /api/auth/login` with `{ "mode": "login" | "create", "username": "...", "password": "..." }`
+- `GET /api/auth/session`
+- `POST /api/auth/logout`
 - `POST /api/property-agent/set-search`
 - `GET /api/property-agent/status`
 - `POST /api/property-agent/cancel`
 - `GET /api/cron/property-agent`
+
+The property agent endpoints require `Authorization: Bearer <session_token>`.
 
 The legacy Redis key/value routes are still available for simple compatibility:
 

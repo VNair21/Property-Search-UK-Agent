@@ -1,6 +1,6 @@
 import { getTelegramConfig } from "./config";
 import { splitForTelegram, toTelegramMessage, wrapTelegramChunk } from "./format";
-import type { NotificationChannel, PropertyAgentConfig, PropertyFinding } from "./types";
+import type { NotificationChannel, PropertyAgentConfig, PropertyFinding, TelegramNotificationConfig } from "./types";
 
 export async function sendResults(
   findings: PropertyFinding[],
@@ -10,13 +10,16 @@ export async function sendResults(
   return { channel: "telegram", recipient };
 }
 
-export function validateNotificationSettings(): { channel: NotificationChannel; recipient: string } {
-  const telegram = getTelegramConfig();
+export function validateNotificationSettings(config?: PropertyAgentConfig | null): {
+  channel: NotificationChannel;
+  recipient: string;
+} {
+  const telegram = resolveTelegramConfig(config);
   return { channel: "telegram", recipient: telegram.chatId };
 }
 
 async function sendTelegram(findings: PropertyFinding[], config: PropertyAgentConfig): Promise<string> {
-  const telegram = getTelegramConfig();
+  const telegram = resolveTelegramConfig(config);
   const endpoint = `${telegram.apiBaseUrl.replace(/\/$/, "")}/bot${telegram.botToken}/sendMessage`;
   const chunks = splitForTelegram(toTelegramMessage(findings, config));
 
@@ -41,4 +44,8 @@ async function sendTelegram(findings: PropertyFinding[], config: PropertyAgentCo
   }
 
   return telegram.chatId;
+}
+
+function resolveTelegramConfig(config?: PropertyAgentConfig | null): TelegramNotificationConfig {
+  return config?.notification ?? getTelegramConfig();
 }

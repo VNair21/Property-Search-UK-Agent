@@ -62,6 +62,14 @@ input:disabled {
   margin-bottom: 22px;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .eyebrow {
   margin: 0 0 6px;
   color: var(--accent);
@@ -115,6 +123,22 @@ h2 {
   background: var(--danger);
 }
 
+.account-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #30363d;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.6fr);
@@ -135,6 +159,16 @@ h2 {
   padding: 18px;
 }
 
+.auth-shell {
+  min-height: 100vh;
+}
+
+.auth-panel {
+  width: min(430px, 100%);
+  margin: 44px auto 0;
+  padding: 20px;
+}
+
 .panel-heading {
   display: flex;
   align-items: center;
@@ -144,6 +178,12 @@ h2 {
 
 .panel-heading svg {
   color: var(--accent);
+}
+
+.form-section-heading {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
 }
 
 .field {
@@ -187,6 +227,20 @@ input:disabled {
   max-width: 180px;
 }
 
+.credential-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.credential-grid .field {
+  margin-bottom: 0;
+}
+
+.full-span {
+  grid-column: 1 / -1;
+}
+
 .segmented {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -213,6 +267,11 @@ input:disabled {
 .segmented button.selected {
   background: var(--accent);
   color: #ffffff;
+}
+
+.auth-segmented {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 16px;
 }
 
 .actions {
@@ -253,6 +312,16 @@ input:disabled {
 .icon-button {
   width: 44px;
   padding: 0;
+}
+
+.compact-action {
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.full-button {
+  width: 100%;
 }
 
 .primary-button:disabled,
@@ -398,6 +467,10 @@ a:hover {
     grid-template-columns: 1fr;
   }
 
+  .topbar-actions {
+    justify-content: flex-start;
+  }
+
   .status-chip {
     justify-content: flex-start;
     width: max-content;
@@ -413,6 +486,10 @@ a:hover {
 
   .segmented button:nth-child(-n + 2) {
     border-bottom: 1px solid #cfd8d1;
+  }
+
+  .auth-segmented button:nth-child(-n + 2) {
+    border-bottom: 0;
   }
 }
 
@@ -431,5 +508,15 @@ a:hover {
   .icon-button {
     flex: 1;
     width: auto;
+  }
+
+  .account-pill,
+  .compact-action,
+  .topbar-actions .status-chip {
+    width: 100%;
+  }
+
+  .credential-grid {
+    grid-template-columns: 1fr;
   }
 }

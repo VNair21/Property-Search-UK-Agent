@@ -1,6 +1,7 @@
 import { after, NextResponse } from "next/server";
 
-import { configureAndStartAgent, runScheduledAgent } from "@/lib/agent-service";
+import { configureAndStartAgent, runScheduledAgentForUser } from "@/lib/agent-service";
+import { getAuthenticatedUser } from "@/lib/auth";
 import { jsonError } from "@/lib/http";
 
 export const runtime = "nodejs";
@@ -9,11 +10,12 @@ export const maxDuration = 300;
 
 export async function POST(request: Request): Promise<NextResponse> {
   try {
+    const user = await getAuthenticatedUser(request);
     const body = await request.json();
-    const response = await configureAndStartAgent(body);
+    const response = await configureAndStartAgent(body, user.id);
     after(async () => {
       try {
-        await runScheduledAgent();
+        await runScheduledAgentForUser(user.id);
       } catch (error) {
         console.error("Initial property search failed", error);
       }

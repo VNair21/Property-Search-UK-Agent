@@ -22,6 +22,13 @@ export class ConfigError extends AppError {
   }
 }
 
+export class AuthError extends AppError {
+  constructor(message = "Sign in to use your property agent.") {
+    super(message, 401);
+    this.name = "AuthError";
+  }
+}
+
 export function messageFromUnknown(error: unknown): string {
   if (error instanceof Error) {
     return error.message;

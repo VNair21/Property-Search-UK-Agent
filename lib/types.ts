@@ -11,6 +11,17 @@ export const frequencyToMinutes: Record<FrequencyOption, number> = {
   Monthly: 30 * 24 * 60,
 };
 
+export type AuthUser = {
+  id: string;
+  username: string;
+};
+
+export type AuthResponse = {
+  user: AuthUser;
+  session_token: string;
+  expires_at: string;
+};
+
 export type PropertyFinding = {
   rank: number;
   property: string;
@@ -25,6 +36,13 @@ export type PropertyFinding = {
   listing_url: string;
 };
 
+export type TelegramNotificationConfig = {
+  channel: "telegram";
+  botToken: string;
+  chatId: string;
+  apiBaseUrl: string;
+};
+
 export type PropertyAgentConfig = {
   websites_to_search: string[];
   areas_to_search: string[];
@@ -32,6 +50,13 @@ export type PropertyAgentConfig = {
   update_frequency_minutes: number;
   run_time_uk: string | null;
   model: string;
+  notification: TelegramNotificationConfig;
+};
+
+export type PropertyAgentPublicConfig = Omit<PropertyAgentConfig, "notification"> & {
+  telegram_chat_id: string | null;
+  telegram_api_base_url: string | null;
+  has_telegram_bot_token: boolean;
 };
 
 export type PropertyAgentSetRequest = {
@@ -41,6 +66,9 @@ export type PropertyAgentSetRequest = {
   update_frequency_minutes: number;
   run_time_uk?: string | null;
   model?: string | null;
+  telegram_bot_token?: string | null;
+  telegram_chat_id?: string | null;
+  telegram_api_base_url?: string | null;
 };
 
 export type StoredSearchResults = {
@@ -82,7 +110,7 @@ export type PropertyAgentStatusResponse = {
   last_error: string | null;
   notification_channel: NotificationChannel | null;
   recipient: string | null;
-  config: PropertyAgentConfig | null;
+  config: PropertyAgentPublicConfig | null;
   findings: PropertyFinding[];
 };
 

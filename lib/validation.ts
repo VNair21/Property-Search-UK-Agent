@@ -1,10 +1,15 @@
-import { getOpenAIConfig } from "./config";
+import { getOpenAIConfig, getOptionalTelegramConfig } from "./config";
 import { ValidationError } from "./errors";
-import type { PropertyAgentConfig, PropertyAgentSetRequest, PropertyFinding } from "./types";
+import type {
+  PropertyAgentConfig,
+  PropertyAgentSetRequest,
+  PropertyFinding,
+  TelegramNotificationConfig,
+} from "./types";
 
 const UK_TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
-export function configFromRequest(input: unknown): PropertyAgentConfig {
+export function configFromRequest(input: unknown, previousConfig?: PropertyAgentConfig | null): PropertyAgentConfig {
   if (!isRecord(input)) {
     throw new ValidationError("Request body must be a JSON object.");
   }
@@ -16,6 +21,9 @@ export function configFromRequest(input: unknown): PropertyAgentConfig {
     update_frequency_minutes: requiredInteger(input.update_frequency_minutes, "update_frequency_minutes"),
     run_time_uk: optionalString(input.run_time_uk),
     model: optionalString(input.model),
+    telegram_bot_token: optionalString(input.telegram_bot_token),
+    telegram_chat_id: optionalString(input.telegram_chat_id),
+    telegram_api_base_url: optionalString(input.telegram_api_base_url),
   };
 
   const openaiConfig = getOpenAIConfig();
@@ -48,6 +56,7 @@ export function configFromRequest(input: unknown): PropertyAgentConfig {
     update_frequency_minutes: request.update_frequency_minutes,
     run_time_uk: runTimeUk,
     model,
+    notification: telegramNotificationFromRequest(request, previousConfig?.notification ?? getOptionalTelegramConfig()),
   };
 }
 
@@ -115,6 +124,33 @@ function requiredString(value: unknown, fieldName: string): string {
   }
 
   throw new ValidationError(`${fieldName} is required.`);
+}
+
+function telegramNotificationFromRequest(
+  request: Pick<PropertyAgentSetRequest, "telegram_bot_token" | "telegram_chat_id" | "telegram_api_base_url">,
+  previous: TelegramNotificationConfig | null,
+): TelegramNotificationConfig {
+  const botToken = request.telegram_bot_token ?? previous?.botToken ?? "";
+  const chatId = request.telegram_chat_id ?? previous?.chatId ?? "";
+  const apiBaseUrl = (request.telegram_api_base_url ?? previous?.apiBaseUrl ?? "https://api.telegram.org").replace(
+    /\/$/,
+    "",
+  );
+
+  if (!botToken || !chatId) {
+    throw new ValidationError("Telegram bot token and chat ID are required.");
+  }
+
+  if (!/^https?:\/\//i.test(apiBaseUrl)) {
+    throw new ValidationError("Telegram API base URL must start with http:// or https://.");
+  }
+
+  return {
+    channel: "telegram",
+    botToken,
+    chatId,
+    apiBaseUrl,
+  };
 }
 
 function optionalString(value: unknown): string | null {
