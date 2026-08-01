@@ -581,6 +581,36 @@ export default function Home() {
             <h2>Telegram</h2>
           </div>
 
+          <div className="telegram-guide">
+            <h3>Find your Telegram details</h3>
+            <ol>
+              <li>
+                Open Telegram and start a chat with{" "}
+                <a href="https://t.me/BotFather" target="_blank" rel="noreferrer">
+                  @BotFather
+                </a>
+                .
+              </li>
+              <li>
+                Send <code>/newbot</code>, then choose a bot name and a username that ends in <code>bot</code>.
+              </li>
+              <li>Copy the token BotFather gives you and paste it into Bot Token.</li>
+              <li>Open your new bot in Telegram, press Start, and send it any message.</li>
+              <li>
+                In your browser, open <code>https://api.telegram.org/botYOUR_TOKEN/getUpdates</code>,
+                replacing <code>YOUR_TOKEN</code> with your bot token.
+              </li>
+              <li>
+                Find <code>{'"chat":{"id":...}'}</code> in the response, copy that number, and paste it into Chat ID.
+              </li>
+            </ol>
+            <p>
+              Leave API Base URL as <code>https://api.telegram.org</code> unless you use a custom Telegram gateway. For
+              a group chat, add the bot to the group, send a group message, then use the group chat ID from{" "}
+              <code>getUpdates</code>.
+            </p>
+          </div>
+
           <div className="credential-grid">
             <label className="field">
               <span>Bot Token</span>
