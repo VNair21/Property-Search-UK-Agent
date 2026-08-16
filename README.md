@@ -108,10 +108,4 @@ Frequent checks come from `.github/workflows/property-agent-scheduler.yml`, whic
 - `POST /api/property-agent/cancel`
 - `GET /api/cron/property-agent`
 
-The property agent endpoints require `Authorization: Bearer <session_token>`.
-
-The legacy Redis key/value routes are still available for simple compatibility:
-
-- `POST /api/kv/{key}` with `{ "value": "..." }`
-- `GET /api/kv/{key}`
-- `POST /api/kv/bulk` with `{ "values": { "key": "value" } }`
+The property agent endpoints require `Authorization: Bearer <session_token>`. The cron endpoint requires `Authorization: Bearer <CRON_SECRET>`.

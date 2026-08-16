@@ -93,8 +93,8 @@ const firstSetupExamples = [
     label: "Property Criteria",
     value: "2 bed flat, under GBP 350k, near tram or train, low service charge",
   },
-  { label: "OpenAI Secret Key", value: "sk-proj-example-not-a-real-key" },
-  { label: "Telegram Bot Token", value: "123456789:AAExampleTelegramBotToken" },
+  { label: "OpenAI Secret Key", value: "your-openai-secret-key-from-platform" },
+  { label: "Telegram Bot Token", value: "your-telegram-bot-token-from-botfather" },
   { label: "Telegram Chat ID", value: "123456789" },
 ];
 
