@@ -11,6 +11,7 @@ export function agentKeysForUser(userId: string): {
   results: string;
   state: string;
   lock: string;
+  credentials: string;
 } {
   const prefix = `property_agent:user:${userId}`;
 
@@ -19,5 +20,6 @@ export function agentKeysForUser(userId: string): {
     results: `${prefix}:last_results`,
     state: `${prefix}:state`,
     lock: `${prefix}:run_lock`,
+    credentials: `${prefix}:credentials`,
   };
 }

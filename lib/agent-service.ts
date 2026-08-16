@@ -7,15 +7,18 @@ import { computeNextRunAt, isDueForRun } from "./schedule";
 import type {
   NotificationChannel,
   OpenAIProviderConfig,
+  AgentCredentialsResponse,
   PropertyAgentConfig,
   PropertyAgentPublicConfig,
   PropertyAgentSetResponse,
   PropertyAgentStatusResponse,
+  PublicAgentCredentials,
+  StoredAgentCredentials,
   StoredAgentState,
   StoredSearchResults,
   TelegramNotificationConfig,
 } from "./types";
-import { configFromRequest } from "./validation";
+import { configFromRequest, credentialsFromRequest } from "./validation";
 
 type ScheduledRunResult =
   | {
@@ -43,8 +46,12 @@ export async function configureAndStartAgent(
 ): Promise<PropertyAgentSetResponse> {
   const redis = createRedisClient();
   const keys = agentKeysForUser(userId);
-  const previousConfig = await redis.getJson<PropertyAgentConfig>(keys.config);
-  const config = configFromRequest(requestBody, previousConfig);
+  const [previousConfig, previousCredentials] = await Promise.all([
+    redis.getJson<PropertyAgentConfig>(keys.config),
+    redis.getJson<StoredAgentCredentials>(keys.credentials),
+  ]);
+  const config = configFromRequest(requestBody, previousConfig, previousCredentials);
+  const credentials = credentialsFromConfig(config);
   const notification = validateNotificationSettings(config);
   const now = new Date();
   const state: StoredAgentState = {
@@ -60,6 +67,7 @@ export async function configureAndStartAgent(
 
   await redis.pipeline([
     ["SET", keys.config, JSON.stringify(config)],
+    ["SET", keys.credentials, JSON.stringify(credentials)],
     ["DEL", keys.results],
     ["SET", keys.state, JSON.stringify(state)],
     ["SADD", RUNNING_AGENT_USER_IDS_KEY, userId],
@@ -81,12 +89,14 @@ export async function configureAndStartAgent(
 export async function getAgentStatus(userId: string): Promise<PropertyAgentStatusResponse> {
   const redis = createRedisClient();
   const keys = agentKeysForUser(userId);
-  const [config, state, results] = await Promise.all([
+  const [config, state, results, credentials] = await Promise.all([
     redis.getJson<PropertyAgentConfig>(keys.config),
     redis.getJson<StoredAgentState>(keys.state),
     redis.getJson<StoredSearchResults>(keys.results),
+    redis.getJson<StoredAgentCredentials>(keys.credentials),
   ]);
   const notification = notificationFromConfig(config);
+  const publicCredentials = publicCredentialsFromStored(credentials, config);
 
   return {
     is_running: state?.status === "running",
@@ -98,8 +108,37 @@ export async function getAgentStatus(userId: string): Promise<PropertyAgentStatu
     last_error: state?.last_error ?? null,
     notification_channel: state?.notification_channel ?? notification?.channel ?? null,
     recipient: state?.recipient ?? notification?.chatId ?? null,
+    credentials: publicCredentials,
     config: config ? publicConfigFromConfig(config) : null,
     findings: results?.findings ?? [],
+  };
+}
+
+export async function saveAgentCredentials(
+  requestBody: unknown,
+  userId: string,
+): Promise<AgentCredentialsResponse> {
+  const redis = createRedisClient();
+  const keys = agentKeysForUser(userId);
+  const [currentCredentials, currentConfig] = await Promise.all([
+    redis.getJson<StoredAgentCredentials>(keys.credentials),
+    redis.getJson<PropertyAgentConfig>(keys.config),
+  ]);
+  const nextCredentials = credentialsFromRequest(
+    requestBody,
+    currentCredentials ?? credentialsFromConfig(currentConfig),
+  );
+  const commands: Array<[string, ...string[]]> = [["SET", keys.credentials, JSON.stringify(nextCredentials)]];
+  const nextConfig = currentConfig ? configWithCredentials(currentConfig, nextCredentials) : null;
+
+  if (nextConfig) {
+    commands.push(["SET", keys.config, JSON.stringify(nextConfig)]);
+  }
+
+  await redis.pipeline(commands);
+
+  return {
+    credentials: publicCredentialsFromStored(nextCredentials, nextConfig ?? currentConfig),
   };
 }
 
@@ -301,6 +340,52 @@ function publicConfigFromConfig(config: PropertyAgentConfig): PropertyAgentPubli
     telegram_chat_id: notification?.chatId ?? null,
     telegram_api_base_url: notification?.apiBaseUrl ?? null,
     has_telegram_bot_token: Boolean(notification?.botToken),
+  };
+}
+
+function publicCredentialsFromStored(
+  credentials: StoredAgentCredentials | null | undefined,
+  config: PropertyAgentConfig | null | undefined,
+): PublicAgentCredentials {
+  const fallback = credentialsFromConfig(config);
+
+  return {
+    has_openai_api_key: Boolean(credentials?.openai_api_key ?? fallback?.openai_api_key),
+    has_telegram_bot_token: Boolean(credentials?.telegram_bot_token ?? fallback?.telegram_bot_token),
+    telegram_chat_id: credentials?.telegram_chat_id ?? fallback?.telegram_chat_id ?? null,
+    telegram_api_base_url: credentials?.telegram_api_base_url ?? fallback?.telegram_api_base_url ?? null,
+  };
+}
+
+function credentialsFromConfig(config: PropertyAgentConfig | null | undefined): StoredAgentCredentials | null {
+  if (!config) {
+    return null;
+  }
+
+  return {
+    openai_api_key: config.openai.apiKey,
+    telegram_bot_token: config.notification.botToken,
+    telegram_chat_id: config.notification.chatId,
+    telegram_api_base_url: config.notification.apiBaseUrl,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function configWithCredentials(
+  config: PropertyAgentConfig,
+  credentials: StoredAgentCredentials,
+): PropertyAgentConfig {
+  return {
+    ...config,
+    openai: {
+      apiKey: credentials.openai_api_key ?? config.openai.apiKey,
+    },
+    notification: {
+      channel: "telegram",
+      botToken: credentials.telegram_bot_token ?? config.notification.botToken,
+      chatId: credentials.telegram_chat_id ?? config.notification.chatId,
+      apiBaseUrl: credentials.telegram_api_base_url ?? config.notification.apiBaseUrl,
+    },
   };
 }
 

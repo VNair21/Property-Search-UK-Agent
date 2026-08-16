@@ -47,6 +47,32 @@ export type OpenAIProviderConfig = {
   apiKey: string;
 };
 
+export type StoredAgentCredentials = {
+  openai_api_key: string | null;
+  telegram_bot_token: string | null;
+  telegram_chat_id: string | null;
+  telegram_api_base_url: string | null;
+  updated_at: string;
+};
+
+export type PublicAgentCredentials = {
+  has_openai_api_key: boolean;
+  has_telegram_bot_token: boolean;
+  telegram_chat_id: string | null;
+  telegram_api_base_url: string | null;
+};
+
+export type AgentCredentialsRequest = {
+  openai_api_key?: string | null;
+  telegram_bot_token?: string | null;
+  telegram_chat_id?: string | null;
+  telegram_api_base_url?: string | null;
+};
+
+export type AgentCredentialsResponse = {
+  credentials: PublicAgentCredentials;
+};
+
 export type PropertyAgentConfig = {
   websites_to_search: string[];
   areas_to_search: string[];
@@ -117,6 +143,7 @@ export type PropertyAgentStatusResponse = {
   last_error: string | null;
   notification_channel: NotificationChannel | null;
   recipient: string | null;
+  credentials: PublicAgentCredentials;
   config: PropertyAgentPublicConfig | null;
   findings: PropertyFinding[];
 };

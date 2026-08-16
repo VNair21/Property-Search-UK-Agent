@@ -8,6 +8,7 @@ The app lets each user log in, configure a property search, run it immediately w
 
 - `app/page.tsx` - the web dashboard.
 - `app/api/auth/login/route.ts` - creates accounts and logs users in with Redis-backed sessions.
+- `app/api/property-agent/credentials/route.ts` - saves user OpenAI and Telegram credentials independently from starting a search.
 - `app/api/property-agent/set-search/route.ts` - validates and saves a user-scoped search, runs it immediately, and sends the first notification.
 - `app/api/property-agent/status/route.ts` - reads the signed-in user's persisted agent state and latest results.
 - `app/api/property-agent/cancel/route.ts` - marks the signed-in user's agent as stopped.
@@ -97,6 +98,7 @@ This default is compatible with Vercel Hobby plans. To support automatic hourly 
 - `POST /api/auth/login` with `{ "mode": "login" | "create", "username": "...", "password": "..." }`
 - `GET /api/auth/session`
 - `POST /api/auth/logout`
+- `POST /api/property-agent/credentials`
 - `POST /api/property-agent/set-search`
 - `GET /api/property-agent/status`
 - `POST /api/property-agent/cancel`

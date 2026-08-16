@@ -14,7 +14,7 @@ import {
   ShieldCheck,
   UserRound,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   FREQUENCY_OPTIONS,
@@ -24,6 +24,7 @@ import {
   type FrequencyOption,
   type PropertyAgentStatusResponse,
   type PropertyFinding,
+  type PublicAgentCredentials,
 } from "@/lib/types";
 
 type FormState = {
@@ -45,7 +46,12 @@ type AuthFormState = {
   password: string;
 };
 
+type CredentialSaveResponse = {
+  credentials: PublicAgentCredentials;
+};
+
 const SESSION_STORAGE_KEY = "property-agent-session";
+const DEFAULT_TELEGRAM_API_BASE_URL = "https://api.telegram.org";
 
 const defaultFormState: FormState = {
   websites_to_search: "",
@@ -57,7 +63,7 @@ const defaultFormState: FormState = {
   openai_api_key: "",
   telegram_bot_token: "",
   telegram_chat_id: "",
-  telegram_api_base_url: "https://api.telegram.org",
+  telegram_api_base_url: DEFAULT_TELEGRAM_API_BASE_URL,
 };
 
 const defaultAuthFormState: AuthFormState = {
@@ -80,6 +86,18 @@ const tableColumns: Array<{ key: keyof PropertyFinding; label: string }> = [
   { key: "listing_url", label: "Listing" },
 ];
 
+const firstSetupExamples = [
+  { label: "Websites to Search", value: "rightmove.co.uk, zoopla.co.uk" },
+  { label: "Areas to Search", value: "Manchester M20, Didsbury, Chorlton" },
+  {
+    label: "Property Criteria",
+    value: "2 bed flat, under GBP 350k, near tram or train, low service charge",
+  },
+  { label: "OpenAI Secret Key", value: "sk-proj-example-not-a-real-key" },
+  { label: "Telegram Bot Token", value: "123456789:AAExampleTelegramBotToken" },
+  { label: "Telegram Chat ID", value: "123456789" },
+];
+
 export default function Home() {
   const [form, setForm] = useState<FormState>(defaultFormState);
   const [authForm, setAuthForm] = useState<AuthFormState>(defaultAuthFormState);
@@ -89,9 +107,12 @@ export default function Home() {
   const [isLoadingStatus, setIsLoadingStatus] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingCredentials, setIsSavingCredentials] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [message, setMessage] = useState<string>("");
   const [authMessage, setAuthMessage] = useState<string>("");
+  const [credentialMessage, setCredentialMessage] = useState<string>("");
+  const lastSavedCredentialSignature = useRef("");
 
   const selectedMinutes = frequencyToMinutes[form.frequency];
   const requiresRunTime = form.frequency !== "Hourly";
@@ -160,6 +181,7 @@ export default function Home() {
         const statusPayload = payload as PropertyAgentStatusResponse;
         setAgentStatus(statusPayload);
         if (syncForm && statusPayload.config) {
+          const credentials = statusPayload.credentials;
           setForm({
             websites_to_search: statusPayload.config.websites_to_search.join(", "),
             areas_to_search: statusPayload.config.areas_to_search.join(", "),
@@ -169,9 +191,23 @@ export default function Home() {
             model: statusPayload.config.model,
             openai_api_key: "",
             telegram_bot_token: "",
-            telegram_chat_id: statusPayload.config.telegram_chat_id ?? "",
-            telegram_api_base_url: statusPayload.config.telegram_api_base_url ?? "https://api.telegram.org",
+            telegram_chat_id: credentials.telegram_chat_id ?? statusPayload.config.telegram_chat_id ?? "",
+            telegram_api_base_url:
+              credentials.telegram_api_base_url ??
+              statusPayload.config.telegram_api_base_url ??
+              DEFAULT_TELEGRAM_API_BASE_URL,
           });
+        } else if (syncForm) {
+          setForm((current) => ({
+            ...current,
+            openai_api_key: "",
+            telegram_bot_token: "",
+            telegram_chat_id: statusPayload.credentials.telegram_chat_id ?? current.telegram_chat_id,
+            telegram_api_base_url:
+              statusPayload.credentials.telegram_api_base_url ??
+              current.telegram_api_base_url ??
+              DEFAULT_TELEGRAM_API_BASE_URL,
+          }));
         }
       } catch (error) {
         if (showLoading) {
@@ -264,6 +300,90 @@ export default function Home() {
 
     return isRunning ? "running" : "stopped";
   }, [isCheckingSession, isLoadingStatus, isRunning]);
+
+  const savedCredentials = agentStatus?.credentials;
+  const hasSavedOpenAIKey = savedCredentials?.has_openai_api_key ?? agentStatus?.config?.has_openai_api_key ?? false;
+  const hasSavedTelegramBotToken =
+    savedCredentials?.has_telegram_bot_token ?? agentStatus?.config?.has_telegram_bot_token ?? false;
+  const hasSavedTelegramChatId = Boolean(
+    savedCredentials?.telegram_chat_id ?? agentStatus?.config?.telegram_chat_id,
+  );
+  const isFirstSetup = Boolean(agentStatus && !agentStatus.config && !isLoadingStatus);
+
+  const saveCredentials = useCallback(async () => {
+    if (!session) {
+      return;
+    }
+
+    const payload = {
+      openai_api_key: form.openai_api_key.trim(),
+      telegram_bot_token: form.telegram_bot_token.trim(),
+      telegram_chat_id: form.telegram_chat_id.trim(),
+      telegram_api_base_url: form.telegram_api_base_url.trim() || DEFAULT_TELEGRAM_API_BASE_URL,
+    };
+    const hasTypedCredentials = Boolean(
+      payload.openai_api_key ||
+        payload.telegram_bot_token ||
+        payload.telegram_chat_id ||
+        payload.telegram_api_base_url !== DEFAULT_TELEGRAM_API_BASE_URL,
+    );
+
+    if (!hasTypedCredentials) {
+      return;
+    }
+
+    const signature = JSON.stringify(payload);
+    if (signature === lastSavedCredentialSignature.current) {
+      return;
+    }
+
+    setIsSavingCredentials(true);
+    setCredentialMessage("Saving credentials...");
+
+    try {
+      const response = await fetch("/api/property-agent/credentials", {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify(payload),
+      });
+      const responsePayload = (await response.json()) as unknown;
+
+      if (response.status === 401) {
+        handleUnauthorized(errorDetail(responsePayload) ?? "Session expired. Sign in again.");
+        return;
+      }
+
+      if (!response.ok || !isCredentialSaveResponse(responsePayload)) {
+        throw new Error(errorDetail(responsePayload) ?? "Failed to save credentials.");
+      }
+
+      lastSavedCredentialSignature.current = signature;
+      setCredentialMessage("Credentials saved.");
+      setAgentStatus((current) => {
+        if (!current) {
+          return current;
+        }
+
+        return {
+          ...current,
+          credentials: responsePayload.credentials,
+          config: current.config
+            ? {
+                ...current.config,
+                has_openai_api_key: responsePayload.credentials.has_openai_api_key,
+                has_telegram_bot_token: responsePayload.credentials.has_telegram_bot_token,
+                telegram_chat_id: responsePayload.credentials.telegram_chat_id,
+                telegram_api_base_url: responsePayload.credentials.telegram_api_base_url,
+              }
+            : current.config,
+        };
+      });
+    } catch (error) {
+      setCredentialMessage((error as Error).message);
+    } finally {
+      setIsSavingCredentials(false);
+    }
+  }, [authHeaders, form, handleUnauthorized, session]);
 
   async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -462,23 +582,25 @@ export default function Home() {
           </div>
 
           <label className="field">
-            <span>Username</span>
+            <span>Username {requiredMark()}</span>
             <input
               value={authForm.username}
               onChange={(event) => updateAuthForm("username", event.target.value)}
               placeholder="your-name"
               autoComplete="username"
+              required
             />
           </label>
 
           <label className="field">
-            <span>Password</span>
+            <span>Password {requiredMark()}</span>
             <input
               type="password"
               value={authForm.password}
               onChange={(event) => updateAuthForm("password", event.target.value)}
               placeholder="At least 8 characters"
               autoComplete={authForm.mode === "login" ? "current-password" : "new-password"}
+              required
             />
           </label>
 
@@ -523,33 +645,51 @@ export default function Home() {
             <h2>Search Setup</h2>
           </div>
 
+          {isFirstSetup ? (
+            <div className="setup-example">
+              <h3>Example first setup</h3>
+              <p>Use real values in the form. These examples are fake and show the format each required field expects.</p>
+              <dl>
+                {firstSetupExamples.map((example) => (
+                  <div key={example.label}>
+                    <dt>{example.label}</dt>
+                    <dd>{example.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          ) : null}
+
           <label className="field">
-            <span>Websites to Search</span>
+            <span>Websites to Search {requiredMark()}</span>
             <textarea
               value={form.websites_to_search}
               onChange={(event) => updateForm("websites_to_search", event.target.value)}
               placeholder="rightmove.co.uk, zoopla.co.uk"
               rows={3}
+              required
             />
           </label>
 
           <label className="field">
-            <span>Areas to Search</span>
+            <span>Areas to Search {requiredMark()}</span>
             <textarea
               value={form.areas_to_search}
               onChange={(event) => updateForm("areas_to_search", event.target.value)}
               placeholder="Islington, Battersea, Canary Wharf"
               rows={3}
+              required
             />
           </label>
 
           <label className="field">
-            <span>Property Criteria</span>
+            <span>Property Criteria {requiredMark()}</span>
             <textarea
               value={form.property_criteria}
               onChange={(event) => updateForm("property_criteria", event.target.value)}
               placeholder="2 bed flat, under GBP 750k, near transport, low service charge"
               rows={4}
+              required
             />
           </label>
 
@@ -571,7 +711,7 @@ export default function Home() {
           </div>
 
           <label className="field compact-field">
-            <span>Time (UK)</span>
+            <span>Time (UK) {requiresRunTime ? requiredMark() : null}</span>
             <input
               value={form.run_time_uk}
               onChange={(event) => updateForm("run_time_uk", event.target.value)}
@@ -579,6 +719,7 @@ export default function Home() {
               inputMode="numeric"
               maxLength={5}
               disabled={!requiresRunTime}
+              required={requiresRunTime}
             />
           </label>
           {requiresRunTime && form.run_time_uk.trim() && !isValidRunTime ? (
@@ -599,23 +740,26 @@ export default function Home() {
 
           <div className="credential-grid">
             <label className="field">
-              <span>Secret Key</span>
+              <span>Secret Key {!hasSavedOpenAIKey ? requiredMark() : null}</span>
               <input
                 type="password"
                 value={form.openai_api_key}
                 onChange={(event) => updateForm("openai_api_key", event.target.value)}
-                placeholder={agentStatus?.config?.has_openai_api_key ? "Saved - leave blank to keep it" : "sk-..."}
+                onBlur={() => void saveCredentials()}
+                placeholder={hasSavedOpenAIKey ? "Saved - leave blank to keep it" : "sk-proj-example..."}
                 autoComplete="off"
+                required={!hasSavedOpenAIKey}
               />
             </label>
 
             <label className="field">
-              <span>Model</span>
+              <span>Model {requiredMark()}</span>
               <input
                 value={form.model}
                 onChange={(event) => updateForm("model", event.target.value)}
                 placeholder="gpt-5"
                 autoComplete="off"
+                required
               />
             </label>
           </div>
@@ -657,40 +801,53 @@ export default function Home() {
 
           <div className="credential-grid">
             <label className="field">
-              <span>Bot Token</span>
+              <span>Bot Token {!hasSavedTelegramBotToken ? requiredMark() : null}</span>
               <input
                 type="password"
                 value={form.telegram_bot_token}
                 onChange={(event) => updateForm("telegram_bot_token", event.target.value)}
-                placeholder={
-                  agentStatus?.config?.has_telegram_bot_token
-                    ? "Saved - leave blank to keep it"
-                    : "123456789:ABC..."
-                }
+                onBlur={() => void saveCredentials()}
+                placeholder={hasSavedTelegramBotToken ? "Saved - leave blank to keep it" : "123456789:ABC..."}
                 autoComplete="off"
+                required={!hasSavedTelegramBotToken}
               />
             </label>
 
             <label className="field">
-              <span>Chat ID</span>
+              <span>Chat ID {!hasSavedTelegramChatId ? requiredMark() : null}</span>
               <input
                 value={form.telegram_chat_id}
                 onChange={(event) => updateForm("telegram_chat_id", event.target.value)}
+                onBlur={() => void saveCredentials()}
                 placeholder="123456789"
                 autoComplete="off"
+                required={!hasSavedTelegramChatId}
               />
             </label>
 
             <label className="field full-span">
-              <span>API Base URL</span>
+              <span>API Base URL {requiredMark()}</span>
               <input
                 value={form.telegram_api_base_url}
                 onChange={(event) => updateForm("telegram_api_base_url", event.target.value)}
-                placeholder="https://api.telegram.org"
+                onBlur={() => void saveCredentials()}
+                placeholder={DEFAULT_TELEGRAM_API_BASE_URL}
                 autoComplete="off"
+                required
               />
             </label>
           </div>
+          {credentialMessage ? (
+            <p
+              className={
+                credentialMessage === "Credentials saved." || credentialMessage === "Saving credentials..."
+                  ? "message"
+                  : "validation"
+              }
+            >
+              {isSavingCredentials ? "Saving credentials..." : credentialMessage}
+            </p>
+          ) : null}
 
           <div className="actions">
             <button className="primary-button" type="submit" disabled={isSaving}>
@@ -866,8 +1023,30 @@ function isSessionPayload(value: unknown): value is { user: AuthUser } {
   return isRecord(value) && isAuthUser(value.user);
 }
 
+function isCredentialSaveResponse(value: unknown): value is CredentialSaveResponse {
+  return isRecord(value) && isPublicAgentCredentials(value.credentials);
+}
+
+function isPublicAgentCredentials(value: unknown): value is PublicAgentCredentials {
+  return (
+    isRecord(value) &&
+    typeof value.has_openai_api_key === "boolean" &&
+    typeof value.has_telegram_bot_token === "boolean" &&
+    (typeof value.telegram_chat_id === "string" || value.telegram_chat_id === null) &&
+    (typeof value.telegram_api_base_url === "string" || value.telegram_api_base_url === null)
+  );
+}
+
 function isAuthUser(value: unknown): value is AuthUser {
   return isRecord(value) && typeof value.id === "string" && typeof value.username === "string";
+}
+
+function requiredMark() {
+  return (
+    <abbr className="required-mark" title="required">
+      *
+    </abbr>
+  );
 }
 
 function errorDetail(value: unknown): string | null {

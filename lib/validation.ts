@@ -1,16 +1,22 @@
 import { getDefaultOpenAIModel, getOptionalTelegramConfig } from "./config";
 import { ValidationError } from "./errors";
 import type {
+  AgentCredentialsRequest,
   OpenAIProviderConfig,
   PropertyAgentConfig,
   PropertyAgentSetRequest,
   PropertyFinding,
+  StoredAgentCredentials,
   TelegramNotificationConfig,
 } from "./types";
 
 const UK_TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
-export function configFromRequest(input: unknown, previousConfig?: PropertyAgentConfig | null): PropertyAgentConfig {
+export function configFromRequest(
+  input: unknown,
+  previousConfig?: PropertyAgentConfig | null,
+  previousCredentials?: StoredAgentCredentials | null,
+): PropertyAgentConfig {
   if (!isRecord(input)) {
     throw new ValidationError("Request body must be a JSON object.");
   }
@@ -57,8 +63,40 @@ export function configFromRequest(input: unknown, previousConfig?: PropertyAgent
     update_frequency_minutes: request.update_frequency_minutes,
     run_time_uk: runTimeUk,
     model,
-    openai: openAIProviderFromRequest(request, previousConfig?.openai ?? null),
-    notification: telegramNotificationFromRequest(request, previousConfig?.notification ?? getOptionalTelegramConfig()),
+    openai: openAIProviderFromRequest(request, previousOpenAIProvider(previousConfig, previousCredentials)),
+    notification: telegramNotificationFromRequest(
+      request,
+      previousTelegramConfig(previousConfig, previousCredentials),
+    ),
+  };
+}
+
+export function credentialsFromRequest(
+  input: unknown,
+  previousCredentials?: StoredAgentCredentials | null,
+): StoredAgentCredentials {
+  if (!isRecord(input)) {
+    throw new ValidationError("Request body must be a JSON object.");
+  }
+
+  const request: AgentCredentialsRequest = {
+    openai_api_key: optionalString(input.openai_api_key),
+    telegram_bot_token: optionalString(input.telegram_bot_token),
+    telegram_chat_id: optionalString(input.telegram_chat_id),
+    telegram_api_base_url: optionalString(input.telegram_api_base_url),
+  };
+  const telegramApiBaseUrl = request.telegram_api_base_url ?? previousCredentials?.telegram_api_base_url ?? null;
+
+  if (telegramApiBaseUrl && !/^https?:\/\//i.test(telegramApiBaseUrl)) {
+    throw new ValidationError("Telegram API base URL must start with http:// or https://.");
+  }
+
+  return {
+    openai_api_key: request.openai_api_key ?? previousCredentials?.openai_api_key ?? null,
+    telegram_bot_token: request.telegram_bot_token ?? previousCredentials?.telegram_bot_token ?? null,
+    telegram_chat_id: request.telegram_chat_id ?? previousCredentials?.telegram_chat_id ?? null,
+    telegram_api_base_url: telegramApiBaseUrl,
+    updated_at: new Date().toISOString(),
   };
 }
 
@@ -128,6 +166,15 @@ function requiredString(value: unknown, fieldName: string): string {
   throw new ValidationError(`${fieldName} is required.`);
 }
 
+function previousOpenAIProvider(
+  previousConfig: PropertyAgentConfig | null | undefined,
+  previousCredentials: StoredAgentCredentials | null | undefined,
+): OpenAIProviderConfig | null {
+  const apiKey = previousCredentials?.openai_api_key ?? previousConfig?.openai?.apiKey ?? "";
+
+  return apiKey ? { apiKey } : null;
+}
+
 function openAIProviderFromRequest(
   request: Pick<PropertyAgentSetRequest, "openai_api_key">,
   previous: OpenAIProviderConfig | null,
@@ -140,6 +187,25 @@ function openAIProviderFromRequest(
 
   return {
     apiKey,
+  };
+}
+
+function previousTelegramConfig(
+  previousConfig: PropertyAgentConfig | null | undefined,
+  previousCredentials: StoredAgentCredentials | null | undefined,
+): TelegramNotificationConfig | null {
+  const envTelegram = getOptionalTelegramConfig();
+  const fallback = previousConfig?.notification ?? envTelegram;
+  const botToken = previousCredentials?.telegram_bot_token ?? fallback?.botToken ?? "";
+  const chatId = previousCredentials?.telegram_chat_id ?? fallback?.chatId ?? "";
+  const apiBaseUrl =
+    previousCredentials?.telegram_api_base_url ?? fallback?.apiBaseUrl ?? "https://api.telegram.org";
+
+  return {
+    channel: "telegram",
+    botToken,
+    chatId,
+    apiBaseUrl,
   };
 }
 
