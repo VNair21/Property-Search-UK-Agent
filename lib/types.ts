@@ -45,7 +45,6 @@ export type TelegramNotificationConfig = {
 
 export type OpenAIProviderConfig = {
   apiKey: string;
-  endpoint: string;
 };
 
 export type PropertyAgentConfig = {
@@ -60,7 +59,6 @@ export type PropertyAgentConfig = {
 };
 
 export type PropertyAgentPublicConfig = Omit<PropertyAgentConfig, "notification" | "openai"> & {
-  openai_api_endpoint: string | null;
   has_openai_api_key: boolean;
   telegram_chat_id: string | null;
   telegram_api_base_url: string | null;
@@ -75,7 +73,6 @@ export type PropertyAgentSetRequest = {
   run_time_uk?: string | null;
   model?: string | null;
   openai_api_key?: string | null;
-  openai_api_endpoint?: string | null;
   telegram_bot_token?: string | null;
   telegram_chat_id?: string | null;
   telegram_api_base_url?: string | null;

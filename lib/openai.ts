@@ -2,12 +2,14 @@ import { toMarkdownTable } from "./format";
 import { validateFindings } from "./validation";
 import type { PropertyAgentConfig, SearchRunResult } from "./types";
 
+const OPENAI_RESPONSES_ENDPOINT = "https://api.openai.com/v1/responses";
+
 export async function runPropertySearch(config: PropertyAgentConfig): Promise<SearchRunResult> {
-  if (!config.openai?.apiKey || !config.openai.endpoint) {
-    throw new Error("OpenAI API key and endpoint must be configured in the dashboard.");
+  if (!config.openai?.apiKey) {
+    throw new Error("OpenAI API key must be configured in the dashboard.");
   }
 
-  const response = await fetch(config.openai.endpoint, {
+  const response = await fetch(OPENAI_RESPONSES_ENDPOINT, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${config.openai.apiKey}`,

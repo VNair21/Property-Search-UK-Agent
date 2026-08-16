@@ -297,7 +297,6 @@ function publicConfigFromConfig(config: PropertyAgentConfig): PropertyAgentPubli
     update_frequency_minutes: config.update_frequency_minutes,
     run_time_uk: config.run_time_uk,
     model: config.model,
-    openai_api_endpoint: openai?.endpoint ?? null,
     has_openai_api_key: Boolean(openai?.apiKey),
     telegram_chat_id: notification?.chatId ?? null,
     telegram_api_base_url: notification?.apiBaseUrl ?? null,

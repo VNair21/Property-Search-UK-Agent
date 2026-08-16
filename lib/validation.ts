@@ -23,7 +23,6 @@ export function configFromRequest(input: unknown, previousConfig?: PropertyAgent
     run_time_uk: optionalString(input.run_time_uk),
     model: optionalString(input.model),
     openai_api_key: optionalString(input.openai_api_key),
-    openai_api_endpoint: optionalString(input.openai_api_endpoint),
     telegram_bot_token: optionalString(input.telegram_bot_token),
     telegram_chat_id: optionalString(input.telegram_chat_id),
     telegram_api_base_url: optionalString(input.telegram_api_base_url),
@@ -130,23 +129,17 @@ function requiredString(value: unknown, fieldName: string): string {
 }
 
 function openAIProviderFromRequest(
-  request: Pick<PropertyAgentSetRequest, "openai_api_key" | "openai_api_endpoint">,
+  request: Pick<PropertyAgentSetRequest, "openai_api_key">,
   previous: OpenAIProviderConfig | null,
 ): OpenAIProviderConfig {
   const apiKey = request.openai_api_key ?? previous?.apiKey ?? "";
-  const endpoint = request.openai_api_endpoint ?? previous?.endpoint ?? "https://api.openai.com/v1/responses";
 
   if (!apiKey) {
     throw new ValidationError("OpenAI API key is required.");
   }
 
-  if (!/^https?:\/\//i.test(endpoint)) {
-    throw new ValidationError("OpenAI API endpoint must start with http:// or https://.");
-  }
-
   return {
     apiKey,
-    endpoint,
   };
 }
 

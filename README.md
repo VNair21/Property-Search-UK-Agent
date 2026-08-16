@@ -55,7 +55,7 @@ UPSTASH_REDIS_REST_TOKEN=
 
 For Redis Cloud, open your database's **Redis SDK clients** connection option, choose Node.js, and use the connection string as `REDIS_URL`. It usually looks like `redis://default:<password>@<host>:<port>` or `rediss://default:<password>@<host>:<port>` when TLS is enabled.
 
-OpenAI API credentials are entered in the dashboard for each user. The app stores each user's API endpoint and secret key with their agent config and does not use a shared project-level OpenAI key.
+OpenAI API credentials are entered in the dashboard for each user. The app stores each user's secret key with their agent config and does not use a shared project-level OpenAI key.
 
 Telegram credentials are entered in the dashboard for each user. These environment variables are optional fallbacks for older saved configs:
 
