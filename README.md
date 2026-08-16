@@ -76,21 +76,25 @@ TELEGRAM_API_BASE_URL=https://api.telegram.org
 6. Add the environment variables above.
 7. Set `CRON_SECRET` to a random value with at least 16 characters.
 8. Deploy.
+9. In GitHub, open the repository's **Settings > Secrets and variables > Actions** page and add these repository secrets:
+   - `PROPERTY_AGENT_CRON_URL`: `https://your-app.vercel.app/api/cron/property-agent`
+   - `CRON_SECRET`: the same value you set in Vercel.
+10. Keep GitHub Actions enabled. The committed scheduler workflow will wake the app regularly on Vercel Hobby.
 
-The default `vercel.json` cron checks for due agents every minute:
+The `vercel.json` cron is intentionally kept to once per day so Vercel Hobby deployments pass:
 
 ```json
 {
   "crons": [
     {
       "path": "/api/cron/property-agent",
-      "schedule": "* * * * *"
+      "schedule": "0 8 * * *"
     }
   ]
 }
 ```
 
-The cron route does not run every user's search every minute. It checks persisted `next_run_at` values in Redis and only runs agents that are due, so Hourly, Daily, Weekly, and Monthly settings are controlled by the app. Vercel Hobby projects only support daily cron invocations, so this minute-level scheduler requires Vercel Pro/Enterprise or an external cron provider calling `/api/cron/property-agent` every minute.
+Frequent checks come from `.github/workflows/property-agent-scheduler.yml`, which calls `/api/cron/property-agent` every 5 minutes. The cron route does not run every user's search every time it is called. It checks persisted `next_run_at` values in Redis and only runs agents that are due, so Hourly, Daily, Weekly, and Monthly settings are controlled by the app. GitHub scheduled workflows can occasionally be delayed, so runs happen on the next scheduler wake after an agent is due.
 
 ## API
 

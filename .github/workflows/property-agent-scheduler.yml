@@ -1,0 +1,40 @@
+name: Property Agent Scheduler
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: property-agent-scheduler
+  cancel-in-progress: true
+
+jobs:
+  trigger:
+    name: Wake due property agents
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Call scheduler endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          CRON_URL: ${{ secrets.PROPERTY_AGENT_CRON_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CRON_URL}" ]; then
+            echo "::error::Set PROPERTY_AGENT_CRON_URL to https://your-app.vercel.app/api/cron/property-agent"
+            exit 1
+          fi
+
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "::error::Set CRON_SECRET to the same value configured in Vercel."
+            exit 1
+          fi
+
+          curl --fail --show-error --silent --max-time 120 \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "${CRON_URL}"
