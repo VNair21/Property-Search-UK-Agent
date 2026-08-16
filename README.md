@@ -77,20 +77,20 @@ TELEGRAM_API_BASE_URL=https://api.telegram.org
 7. Set `CRON_SECRET` to a random value with at least 16 characters.
 8. Deploy.
 
-The default `vercel.json` cron runs once per day at `08:00` UTC:
+The default `vercel.json` cron checks for due agents every minute:
 
 ```json
 {
   "crons": [
     {
       "path": "/api/cron/property-agent",
-      "schedule": "0 8 * * *"
+      "schedule": "* * * * *"
     }
   ]
 }
 ```
 
-This default is compatible with Vercel Hobby plans. To support automatic hourly checks, use a Pro plan or an external cron provider, then change the schedule to `0 * * * *` or call `/api/cron/property-agent` at the cadence you need.
+The cron route does not run every user's search every minute. It checks persisted `next_run_at` values in Redis and only runs agents that are due, so Hourly, Daily, Weekly, and Monthly settings are controlled by the app. Vercel Hobby projects only support daily cron invocations, so this minute-level scheduler requires Vercel Pro/Enterprise or an external cron provider calling `/api/cron/property-agent` every minute.
 
 ## API
 
