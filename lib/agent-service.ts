@@ -6,6 +6,7 @@ import { createRedisClient } from "./redis";
 import { computeNextRunAt, isDueForRun } from "./schedule";
 import type {
   NotificationChannel,
+  OpenAIProviderConfig,
   PropertyAgentConfig,
   PropertyAgentPublicConfig,
   PropertyAgentSetResponse,
@@ -287,6 +288,7 @@ async function releaseLock(
 
 function publicConfigFromConfig(config: PropertyAgentConfig): PropertyAgentPublicConfig {
   const notification = notificationFromConfig(config);
+  const openai = openAIFromConfig(config);
 
   return {
     websites_to_search: config.websites_to_search,
@@ -295,10 +297,16 @@ function publicConfigFromConfig(config: PropertyAgentConfig): PropertyAgentPubli
     update_frequency_minutes: config.update_frequency_minutes,
     run_time_uk: config.run_time_uk,
     model: config.model,
+    openai_api_endpoint: openai?.endpoint ?? null,
+    has_openai_api_key: Boolean(openai?.apiKey),
     telegram_chat_id: notification?.chatId ?? null,
     telegram_api_base_url: notification?.apiBaseUrl ?? null,
     has_telegram_bot_token: Boolean(notification?.botToken),
   };
+}
+
+function openAIFromConfig(config: PropertyAgentConfig | null | undefined): OpenAIProviderConfig | null {
+  return config?.openai ?? null;
 }
 
 function notificationFromConfig(config: PropertyAgentConfig | null | undefined): TelegramNotificationConfig | null {

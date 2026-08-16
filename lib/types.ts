@@ -43,6 +43,11 @@ export type TelegramNotificationConfig = {
   apiBaseUrl: string;
 };
 
+export type OpenAIProviderConfig = {
+  apiKey: string;
+  endpoint: string;
+};
+
 export type PropertyAgentConfig = {
   websites_to_search: string[];
   areas_to_search: string[];
@@ -50,10 +55,13 @@ export type PropertyAgentConfig = {
   update_frequency_minutes: number;
   run_time_uk: string | null;
   model: string;
+  openai: OpenAIProviderConfig;
   notification: TelegramNotificationConfig;
 };
 
-export type PropertyAgentPublicConfig = Omit<PropertyAgentConfig, "notification"> & {
+export type PropertyAgentPublicConfig = Omit<PropertyAgentConfig, "notification" | "openai"> & {
+  openai_api_endpoint: string | null;
+  has_openai_api_key: boolean;
   telegram_chat_id: string | null;
   telegram_api_base_url: string | null;
   has_telegram_bot_token: boolean;
@@ -66,6 +74,8 @@ export type PropertyAgentSetRequest = {
   update_frequency_minutes: number;
   run_time_uk?: string | null;
   model?: string | null;
+  openai_api_key?: string | null;
+  openai_api_endpoint?: string | null;
   telegram_bot_token?: string | null;
   telegram_chat_id?: string | null;
   telegram_api_base_url?: string | null;

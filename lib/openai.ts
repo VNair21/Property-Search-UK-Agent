@@ -1,14 +1,16 @@
-import { getOpenAIConfig } from "./config";
 import { toMarkdownTable } from "./format";
 import { validateFindings } from "./validation";
 import type { PropertyAgentConfig, SearchRunResult } from "./types";
 
 export async function runPropertySearch(config: PropertyAgentConfig): Promise<SearchRunResult> {
-  const { apiKey } = getOpenAIConfig();
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  if (!config.openai?.apiKey || !config.openai.endpoint) {
+    throw new Error("OpenAI API key and endpoint must be configured in the dashboard.");
+  }
+
+  const response = await fetch(config.openai.endpoint, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${config.openai.apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({

@@ -1,6 +1,7 @@
-import { getOpenAIConfig, getOptionalTelegramConfig } from "./config";
+import { getDefaultOpenAIModel, getOptionalTelegramConfig } from "./config";
 import { ValidationError } from "./errors";
 import type {
+  OpenAIProviderConfig,
   PropertyAgentConfig,
   PropertyAgentSetRequest,
   PropertyFinding,
@@ -21,17 +22,18 @@ export function configFromRequest(input: unknown, previousConfig?: PropertyAgent
     update_frequency_minutes: requiredInteger(input.update_frequency_minutes, "update_frequency_minutes"),
     run_time_uk: optionalString(input.run_time_uk),
     model: optionalString(input.model),
+    openai_api_key: optionalString(input.openai_api_key),
+    openai_api_endpoint: optionalString(input.openai_api_endpoint),
     telegram_bot_token: optionalString(input.telegram_bot_token),
     telegram_chat_id: optionalString(input.telegram_chat_id),
     telegram_api_base_url: optionalString(input.telegram_api_base_url),
   };
 
-  const openaiConfig = getOpenAIConfig();
   const websites = splitList(request.websites_to_search, "websites_to_search");
   const areas = splitList(request.areas_to_search, "areas_to_search");
   const criteria = request.property_criteria.trim();
   const runTimeUk = request.run_time_uk?.trim() || null;
-  const model = request.model?.trim() || openaiConfig.defaultModel;
+  const model = request.model?.trim() || previousConfig?.model || getDefaultOpenAIModel();
 
   if (!criteria) {
     throw new ValidationError("Property criteria cannot be empty.");
@@ -56,6 +58,7 @@ export function configFromRequest(input: unknown, previousConfig?: PropertyAgent
     update_frequency_minutes: request.update_frequency_minutes,
     run_time_uk: runTimeUk,
     model,
+    openai: openAIProviderFromRequest(request, previousConfig?.openai ?? null),
     notification: telegramNotificationFromRequest(request, previousConfig?.notification ?? getOptionalTelegramConfig()),
   };
 }
@@ -124,6 +127,27 @@ function requiredString(value: unknown, fieldName: string): string {
   }
 
   throw new ValidationError(`${fieldName} is required.`);
+}
+
+function openAIProviderFromRequest(
+  request: Pick<PropertyAgentSetRequest, "openai_api_key" | "openai_api_endpoint">,
+  previous: OpenAIProviderConfig | null,
+): OpenAIProviderConfig {
+  const apiKey = request.openai_api_key ?? previous?.apiKey ?? "";
+  const endpoint = request.openai_api_endpoint ?? previous?.endpoint ?? "https://api.openai.com/v1/responses";
+
+  if (!apiKey) {
+    throw new ValidationError("OpenAI API key is required.");
+  }
+
+  if (!/^https?:\/\//i.test(endpoint)) {
+    throw new ValidationError("OpenAI API endpoint must start with http:// or https://.");
+  }
+
+  return {
+    apiKey,
+    endpoint,
+  };
 }
 
 function telegramNotificationFromRequest(

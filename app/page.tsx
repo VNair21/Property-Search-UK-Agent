@@ -5,6 +5,7 @@ import {
   CalendarClock,
   CircleStop,
   ExternalLink,
+  KeyRound,
   LogOut,
   MessageCircle,
   RefreshCw,
@@ -31,6 +32,9 @@ type FormState = {
   property_criteria: string;
   frequency: FrequencyOption;
   run_time_uk: string;
+  model: string;
+  openai_api_key: string;
+  openai_api_endpoint: string;
   telegram_bot_token: string;
   telegram_chat_id: string;
   telegram_api_base_url: string;
@@ -50,6 +54,9 @@ const defaultFormState: FormState = {
   property_criteria: "",
   frequency: "Daily",
   run_time_uk: "09:00",
+  model: "gpt-5",
+  openai_api_key: "",
+  openai_api_endpoint: "https://api.openai.com/v1/responses",
   telegram_bot_token: "",
   telegram_chat_id: "",
   telegram_api_base_url: "https://api.telegram.org",
@@ -161,6 +168,9 @@ export default function Home() {
             property_criteria: statusPayload.config.property_criteria,
             frequency: minutesToFrequency(statusPayload.config.update_frequency_minutes) ?? "Daily",
             run_time_uk: statusPayload.config.run_time_uk ?? "09:00",
+            model: statusPayload.config.model,
+            openai_api_key: "",
+            openai_api_endpoint: statusPayload.config.openai_api_endpoint ?? "https://api.openai.com/v1/responses",
             telegram_bot_token: "",
             telegram_chat_id: statusPayload.config.telegram_chat_id ?? "",
             telegram_api_base_url: statusPayload.config.telegram_api_base_url ?? "https://api.telegram.org",
@@ -316,6 +326,9 @@ export default function Home() {
           property_criteria: form.property_criteria,
           update_frequency_minutes: selectedMinutes,
           run_time_uk: requiresRunTime ? form.run_time_uk.trim() : null,
+          model: form.model,
+          openai_api_key: form.openai_api_key,
+          openai_api_endpoint: form.openai_api_endpoint,
           telegram_bot_token: form.telegram_bot_token,
           telegram_chat_id: form.telegram_chat_id,
           telegram_api_base_url: form.telegram_api_base_url,
@@ -333,7 +346,7 @@ export default function Home() {
       }
 
       setMessage("Agent started. First search is running in the background.");
-      setForm((current) => ({ ...current, telegram_bot_token: "" }));
+      setForm((current) => ({ ...current, openai_api_key: "", telegram_bot_token: "" }));
       await loadStatus({ showLoading: false });
     } catch (error) {
       setMessage((error as Error).message);
@@ -575,6 +588,51 @@ export default function Home() {
           {requiresRunTime && form.run_time_uk.trim() && !isValidRunTime ? (
             <p className="validation">Use 24-hour HH:MM format.</p>
           ) : null}
+
+          <div className="panel-heading form-section-heading">
+            <KeyRound size={18} aria-hidden="true" />
+            <h2>OpenAI API</h2>
+          </div>
+
+          <div className="openai-guide">
+            <p>
+              Use your own OpenAI project key here. The agent will send searches to this endpoint with your key, and
+              saved keys stay hidden after you submit the form.
+            </p>
+          </div>
+
+          <div className="credential-grid">
+            <label className="field">
+              <span>Secret Key</span>
+              <input
+                type="password"
+                value={form.openai_api_key}
+                onChange={(event) => updateForm("openai_api_key", event.target.value)}
+                placeholder={agentStatus?.config?.has_openai_api_key ? "Saved - leave blank to keep it" : "sk-..."}
+                autoComplete="off"
+              />
+            </label>
+
+            <label className="field">
+              <span>Model</span>
+              <input
+                value={form.model}
+                onChange={(event) => updateForm("model", event.target.value)}
+                placeholder="gpt-5"
+                autoComplete="off"
+              />
+            </label>
+
+            <label className="field full-span">
+              <span>Responses Endpoint</span>
+              <input
+                value={form.openai_api_endpoint}
+                onChange={(event) => updateForm("openai_api_endpoint", event.target.value)}
+                placeholder="https://api.openai.com/v1/responses"
+                autoComplete="off"
+              />
+            </label>
+          </div>
 
           <div className="panel-heading form-section-heading">
             <MessageCircle size={18} aria-hidden="true" />

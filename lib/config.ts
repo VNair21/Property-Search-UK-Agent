@@ -39,17 +39,8 @@ export function getRedisConnectionConfig(): RedisConnectionConfig {
   };
 }
 
-export function getOpenAIConfig(): { apiKey: string; defaultModel: string } {
-  const apiKey = cleanEnv(process.env.OPENAI_API_KEY);
-
-  if (!apiKey) {
-    throw new ConfigError("OPENAI_API_KEY must be configured.");
-  }
-
-  return {
-    apiKey,
-    defaultModel: cleanEnv(process.env.DEFAULT_OPENAI_MODEL) || "gpt-5",
-  };
+export function getDefaultOpenAIModel(): string {
+  return cleanEnv(process.env.DEFAULT_OPENAI_MODEL) || "gpt-5";
 }
 
 export function getTelegramConfig(): TelegramNotificationConfig {
